@@ -10,6 +10,9 @@ except ImportError:
     TRANSFORMERS_AVAILABLE = False
     print("⚠️  transformers library not installed - running in heuristics-only mode")
 
+import os
+from dotenv import load_dotenv
+load_dotenv()
 import re
 from typing import Dict, Optional
 import warnings
@@ -440,7 +443,7 @@ class FakeNewsAnalyzer:
     def __init__(self):
         self.analyzer = HybridFakeNewsAnalyzer()
         
-        # Initialize web search verifier
+        # Web search
         if WEB_SEARCH_AVAILABLE:
             self.web_verifier = WebSearchVerifier()
             self.use_web_search = True
@@ -448,41 +451,51 @@ class FakeNewsAnalyzer:
         else:
             self.web_verifier = None
             self.use_web_search = False
-            print("⚠️  Web search disabled (install duckduckgo-search package to enable)")
-    
+
+        # Fact checker
+        try:
+            from fact_checker import FactChecker
+            api_key = os.environ.get('GOOGLE_FACT_CHECK_KEY')
+            if api_key:
+                self.fact_checker = FactChecker(api_key)
+                print("✅ Google Fact Check API enabled")
+            else:
+                self.fact_checker = None
+                print("⚠️  No API key found in .env")
+        except ImportError as e:
+            self.fact_checker = None
+            print(f"⚠️  Fact checker module not found: {e}")
+        except Exception as e:
+            self.fact_checker = None
+            print(f"⚠️  Fact checker error: {e}")
+
     def analyze(self, text: str):
-        """
-        Analyze text and return results in the format expected by app.py
-        Includes web search verification for enhanced accuracy
-        """
-        # Get base analysis from hybrid analyzer
         result = self.analyzer.analyze(text)
         base_score = result['fake_news_probability']
-        
-        # Web search verification (if enabled and score is uncertain)
+
+        # Web search layer
         web_search_result = None
-        web_explanation = None
-        credible_sources = 0
-        
         if self.use_web_search and 30 < base_score < 80:
             try:
-                print("🔍 Verifying claims via web search...")
                 web_search_result = self.web_verifier.verify_claims(text, max_searches=2)
-                
-                # Adjust score based on web search findings
-                adjustment = web_search_result['score_adjustment']
-                base_score += adjustment
-                base_score = max(0, min(base_score, 100))  # Keep in 0-100 range
-                
-                web_explanation = web_search_result['explanation']
-                credible_sources = web_search_result['credible_sources_found']
-                
-                print(f"✅ Web verification complete: {web_explanation} (adjustment: {adjustment:+.1f})")
-                
+                base_score += web_search_result['score_adjustment']
+                base_score = max(0, min(base_score, 100))
             except Exception as e:
-                print(f"⚠️  Web search error: {e}")
-                web_explanation = "Web search unavailable"
-        
+                print(f"⚠️ Web search error: {e}")
+
+        # Fact check layer
+        fact_check_result = None
+        if self.fact_checker:
+            try:
+                fact_check_result = self.fact_checker.check_claims(text)
+                if fact_check_result['verdict'] == 'FALSE':
+                    base_score = min(base_score + 20, 100)
+                elif fact_check_result['verdict'] == 'TRUE':
+                    base_score = max(base_score - 20, 0)
+                print(f"✅ Fact check: {fact_check_result['verdict']} ({fact_check_result['confidence']}% confidence)")
+            except Exception as e:
+                print(f"⚠️ Fact check error: {e}")
+
         return {
             "probability": round(base_score, 1),
             "factors": {
@@ -490,8 +503,11 @@ class FakeNewsAnalyzer:
                 "heuristic_score": result['components']['heuristic_score'],
                 "nlp_adjustment": result['components']['nlp_adjustment'],
                 "model_used": result['components']['model_used'],
-                "web_verification": web_explanation,
-                "credible_sources_found": credible_sources,
+                "web_verification": web_search_result['explanation'] if web_search_result else None,
+                "credible_sources_found": web_search_result['credible_sources_found'] if web_search_result else 0,
+                "fact_check_verdict": fact_check_result['verdict'] if fact_check_result else None,
+                "fact_check_confidence": fact_check_result['confidence'] if fact_check_result else None,
+                "fact_check_explanation": fact_check_result['explanation'] if fact_check_result else None,
                 "explanation": result['explanation'],
                 "strong_fake_indicators": result['factors']['strong_fake_indicators'],
                 "absurdity_score": result['factors']['absurdity_score'],
@@ -501,6 +517,7 @@ class FakeNewsAnalyzer:
             }
         }
 
+        
 # Test the analyzer
 if __name__ == "__main__":
     print("="*60)
