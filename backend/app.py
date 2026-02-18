@@ -15,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 import logging
+import hashlib
+import json
 
 from fake_news import FakeNewsAnalyzer
 from originality import OriginalityAnalyzer
@@ -43,6 +45,9 @@ app.add_middleware(
 fake_news_analyzer = FakeNewsAnalyzer()
 originality_analyzer = OriginalityAnalyzer()
 cyber_threat_analyzer = CyberThreatAnalyzer()
+
+# Analysis Cache to prevent inconsistent results for identical text
+analysis_cache = {}
 
 
 class AnalysisRequest(BaseModel):
@@ -83,7 +88,19 @@ async def analyze_content(request: AnalysisRequest):
         if not request.text or len(request.text.strip()) < 10:
             raise HTTPException(status_code=400, detail="Text must be at least 10 characters")
         
-        text = request.text.strip()
+        text_raw = request.text.strip()
+        url_raw = request.url.strip() if request.url else ""
+        
+        # Create a unique cache key based on text and URL
+        cache_content = f"{text_raw}|{url_raw}"
+        content_hash = hashlib.md5(cache_content.encode()).hexdigest()
+        
+        # Check cache
+        if content_hash in analysis_cache:
+            logger.info(f"Returning cached result for hash: {content_hash}")
+            return analysis_cache[content_hash]
+        
+        text = text_raw
         
         # Truncate very long texts to prevent timeout (keep first 15000 chars)
         if len(text) > 15000:
@@ -103,7 +120,7 @@ async def analyze_content(request: AnalysisRequest):
         # Determine threat level based on cyber threat risk
         threat_level = get_threat_level(cyber_threat_result["risk_score"])
         
-        return AnalysisResponse(
+        result = AnalysisResponse(
             fake_news_probability=round(fake_news_result["probability"], 1),
             authenticity_score=round(authenticity_score, 1),
             originality_score=round(originality_result["score"], 1),
@@ -112,15 +129,39 @@ async def analyze_content(request: AnalysisRequest):
             analysis_details={
                 "fake_news_factors": fake_news_result["factors"],
                 "originality_factors": originality_result["factors"],
-                "cyber_threat_factors": cyber_threat_result["factors"]
+                "cyber_threat_factors": cyber_threat_result["factors"],
+                "cached": False
             }
         )
+        
+        # Store in cache
+        analysis_cache[content_hash] = result
+        return result
     
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Analysis error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        error_msg = str(e)
+        friendly_msg = format_error_message(error_msg)
+        logger.error(f"Analysis error: {error_msg}")
+        raise HTTPException(status_code=500, detail=friendly_msg)
+
+
+def format_error_message(error: str) -> str:
+    """Map technical error messages to user-friendly terms"""
+    error = error.lower()
+    if "timeout" in error or "timed out" in error:
+        return "The analysis took longer than expected. Please try with a shorter text."
+    if "connection" in error or "network" in error:
+        return "Our secondary verification systems are experiencing connection issues. Please try again in a moment."
+    if "rate limit" in error:
+        return "We've reached our maximum verification capacity for the moment. Please try again shortly."
+    if "module" in error and "not found" in error:
+        return "One of our analysis engines is currently undergoing maintenance. Please try again later."
+    if "memory" in error:
+        return "The content provided is too large for our current processing capacity."
+    
+    return f"We encountered an issue during analysis: {error.split(':')[0]}"
 
 
 def get_threat_level(risk_score: float) -> str:
