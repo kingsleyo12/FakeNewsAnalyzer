@@ -1,26 +1,28 @@
-pip# Fake News & Cyber Threat Intelligence Analyzer
+# Fake News & Cyber Threat Intelligence Analyzer
 
 A production-ready web application that analyzes text content using **Machine Learning + NLP** and outputs **percentage-based confidence scores** for fake news detection, originality analysis, and cyber threat intelligence.
 
 ## 🎯 Features
 
-- **Fake News Probability (0-100%)** - ML-based (TF-IDF + Logistic Regression) + NLP (spaCy + NLTK) + Heuristics
+- **Fake News Probability (0-100%)** - Hybrid model: ML (RoBERTa Transformer) + Heuristics + NLP
+- **Web Search Verification** - Cross-references claims against credible news sources and fact-checkers in real-time
 - **Authenticity Score (0-100%)** - Inverse of fake news probability
 - **Originality Score (0-100%)** - Vocabulary richness, linguistic diversity, content uniqueness
 - **Cyber Threat Risk (0-100%)** - Phishing, social engineering, URL analysis, malicious patterns
 - **Threat Level Labels** - Low / Medium / High / Critical
-- **Explainable AI** - Detailed factor breakdown for each analysis
+- **Explainable AI** - Detailed factor breakdown and web verification reasoning for each analysis
 
 ## 🏗️ Architecture
 
 ```
 ├── backend/
 │   ├── app.py                  # FastAPI main application
-│   ├── fake_news.py            # ML + NLP fake news detection
+│   ├── fake_news.py            # Hybrid ML + Heuristic analyzer
+│   ├── web_verifier.py         # Real-time web search verification (DuckDuckGo)
 │   ├── nlp_analyzer.py         # Advanced NLP features (spaCy + NLTK)
 │   ├── originality.py          # Originality analysis module
 │   ├── cyber_threat.py         # Cyber threat intelligence module
-│   ├── requirements.txt        # Python dependencies
+│   ├── requirements.txt        # Python dependencies (includes transformers, torch)
 │   └── fake_news_model.pkl     # Trained ML model (auto-generated)
 │
 ├── frontend/
@@ -98,7 +100,13 @@ python -m spacy download en_core_web_sm
 python -c "import nltk; nltk.download('vader_lexicon'); nltk.download('punkt'); nltk.download('stopwords')"
 ```
 
-**Note:** The system works without these models but with reduced NLP accuracy. It will automatically fall back to regex-based analysis.
+**Note:** The system uses a pre-trained **RoBERTa** model by default. On the first run, it will download approximately 500MB of model data. If the model cannot be loaded, the system will automatically fall back to heuristics-only mode.
+
+#### 2.5 Dynamic Verification (Optional)
+To enable web search verification, ensure the `ddgs` package is installed:
+```bash
+pip install duckduckgo-search
+```
 
 #### 2.4 Start Backend Server
 
@@ -138,10 +146,10 @@ curl http://localhost:8000/health
 **Hybrid Model: ML (50%) + Heuristics (30%) + NLP (20%)**
 
 #### Machine Learning Component (50%)
-- **Algorithm**: TF-IDF Vectorization + Logistic Regression
-- **Features**: 500 TF-IDF features with 1-3 gram analysis
-- **Training**: Balanced dataset of fake and real news samples
-- **Output**: Calibrated probability (0-100%)
+- **Model**: RoBERTa Transformer (`hamzab/roberta-fake-news-classification`)
+- **Nature**: Deep Learning-based sequence classification
+- **Confidence**: Returns 0-100% probability based on model weights
+- **Output**: Calibrated deep learning probability
 
 #### Heuristic Component (30%)
 Weighted combination of pattern-based indicators:
@@ -163,9 +171,16 @@ Advanced linguistic analysis using spaCy + NLTK:
 | POS Tagging | Detects excessive adjectives/adverbs | +10% fake if excessive |
 | Linguistic Complexity | Flesch score, vocabulary richness | +10% credibility if high |
 
+#### Web Verification Adjustment (Dynamic)
+If the initial analysis is uncertain (score between 30% and 80%), the system triggers a real-time web search:
+- **Credible Source Match**: -15% to -30% fake probability
+- **Fact-Checker Debunk**: +40% fake probability
+- **No Results Found**: +10% fake probability
+- **Non-Credible Source Only**: +20% fake probability
+
 **Formula:**
 ```
-Final Score = (ML_probability × 0.50) + (Heuristic_score × 0.30) + (NLP_adjustment × 0.20)
+Final Score = [(ML × 0.50) + (Heuristic × 0.30) + (NLP × 0.20)] + Web_Adjustment
 ```
 
 **Thresholds:**
@@ -176,11 +191,11 @@ Final Score = (ML_probability × 0.50) + (Heuristic_score × 0.30) + (NLP_adjust
 
 ### Why This System is Accurate
 
-1. **Multi-Model Ensemble**: Combines ML, NLP, and heuristics (reduces bias and variance)
-2. **Industry-Standard Libraries**: spaCy (97% POS accuracy), NLTK VADER (0.96 correlation)
-3. **Research-Backed**: Based on Pérez-Rosas et al. (2018), Shu et al. (2017)
-4. **Explainable AI**: Provides detailed reasoning for each decision
-5. **Balanced Scoring**: High precision (85-90%) and recall (85-90%)
+1. **Multi-Model Ensemble**: Combines Transformer-based ML, NLP, heuristics, and real-time web verification.
+2. **Industry-Standard Libraries**: HuggingFace Transformers, spaCy, NLTK, DuckDuckGo Search.
+3. **Research-Backed**: Based on modern transformer-based detection papers (2020-2023).
+4. **Explainable AI**: Provides detailed reasoning, including credible source count and fact-check status.
+5. **Real-Time Verification**: Goes beyond static models by cross-referencing current world events.
 
 ### Accuracy Metrics
 
@@ -235,12 +250,17 @@ Analyze text content for fake news and cyber threats.
   "analysis_details": {
     "fake_news_factors": {
       "ml_probability": 75.0,
-      "strong_fake_indicators": 30.0,
+      "heuristic_score": 30.0,
+      "nlp_adjustment": 20.0,
+      "model_used": "hybrid",
+      "web_verification": "Verified by 3 credible news sources",
+      "credible_sources_found": 3,
+      "explanation": "AI model: High fake probability; Absurd/implausible claims; Web search confirmed claims",
+      "strong_fake_indicators": 0,
       "absurdity_score": 80.0,
-      "satire_indicators": 85.0,
-      "credibility_score": 15.0,
-      "nlp_credibility": 20.0,
-      "explanation": "ML model: High fake probability; Absurd/implausible claims; Satire/humor indicators"
+      "clickbait_score": 15.0,
+      "credibility_indicators": 20.0,
+      "satire_detected": false
     },
     "originality_factors": {...},
     "cyber_threat_factors": {...}
@@ -289,12 +309,20 @@ Health check endpoint for all services.
 
 ### Backend Issues
 
-**Problem**: `ModuleNotFoundError: No module named 'spacy'`  
-**Solution**: 
+**Problem**: `ModuleNotFoundError: No module named 'transformers'` or `torch`  
+**Solution**: Install Deep Learning dependencies:
 ```bash
-pip install spacy
-python -m spacy download en_core_web_sm
+pip install transformers torch
 ```
+
+**Problem**: `ModuleNotFoundError: No module named 'ddgs'`  
+**Solution**: Install web search verifier:
+```bash
+pip install duckduckgo-search
+```
+
+**Problem**: System hangs at "Loading RoBERTa model"  
+**Solution**: The first run downloads ~500MB. Ensure you have a stable internet connection. If it fails, the system will automatically fall back to heuristics.
 
 **Problem**: `NLTK data not found`  
 **Solution**: The system auto-downloads NLTK data on first run. If it fails:

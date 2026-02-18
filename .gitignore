@@ -1,5 +1,25 @@
+# Python dependencies
+venv/
 .venv/
-__pycache__/
-.vscode/
-node_modules/
+env/
 .env
+*.pyc
+__pycache__/
+*.pkl
+backend/venv/
+
+# Node dependencies
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# IDE settings
+.vscode/
+.idea/
+.DS_Store
+
+# Temporary files
+.old_files/
+backend/old_files/
+*.log
+tmp/

@@ -74,7 +74,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>🔍 Fake News & Cyber Threat Analyzer</h1>
+        <h1>🔍 Fake News & Cyber Threat Intelligence Analyzer</h1>
         <p>Percentage-based analysis for content authenticity and security threats</p>
       </header>
 
@@ -263,6 +263,26 @@ function App() {
                 </p>
               </div>
             </div>
+
+            {/* Web Verification Section - NEW! */}
+            {results.analysis_details.fake_news_factors.web_verification && (
+              <div className="web-verification-section">
+                <h3>🔍 Web Verification Results</h3>
+                <div className="verification-card">
+                  <p className="verification-status">
+                    {results.analysis_details.fake_news_factors.web_verification}
+                  </p>
+                  <p className="credible-sources">
+                    📰 Credible sources found: {results.analysis_details.fake_news_factors.credible_sources_found || 0}
+                  </p>
+                  <p className="verification-note">
+                    {results.analysis_details.fake_news_factors.credible_sources_found > 0
+                      ? '✅ Claims verified by credible news sources'
+                      : '⚠️ No verification from credible sources found'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Detailed Analysis */}
             <div className="details-section">

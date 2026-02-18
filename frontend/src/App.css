@@ -178,6 +178,40 @@
   margin-bottom: 1rem;
 }
 
+.web-verification-section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+}
+
+.verification-card {
+  background: white;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+
+.verification-status {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+}
+
+.credible-sources {
+  font-size: 1rem;
+  color: #4b5563;
+  margin: 0.5rem 0;
+}
+
+.verification-note {
+  font-size: 0.9rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
 .score-display {
   display: flex;
   align-items: center;

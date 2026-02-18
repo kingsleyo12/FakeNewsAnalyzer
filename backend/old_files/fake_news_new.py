@@ -15,13 +15,6 @@ from typing import Dict, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
-try:
-    from web_verifier import WebSearchVerifier
-    WEB_SEARCH_AVAILABLE = True
-except ImportError:
-    WEB_SEARCH_AVAILABLE = False
-    print("⚠️  Web search not available")
-
 class HybridFakeNewsAnalyzer:
     def __init__(self):
         """
@@ -434,72 +427,6 @@ class HybridFakeNewsAnalyzer:
             'error': message
         }
 
-class FakeNewsAnalyzer:
-    """Wrapper to make HybridFakeNewsAnalyzer compatible with existing API"""
-    
-    def __init__(self):
-        self.analyzer = HybridFakeNewsAnalyzer()
-        
-        # Initialize web search verifier
-        if WEB_SEARCH_AVAILABLE:
-            self.web_verifier = WebSearchVerifier()
-            self.use_web_search = True
-            print("✅ Web search verification enabled")
-        else:
-            self.web_verifier = None
-            self.use_web_search = False
-            print("⚠️  Web search disabled (install duckduckgo-search package to enable)")
-    
-    def analyze(self, text: str):
-        """
-        Analyze text and return results in the format expected by app.py
-        Includes web search verification for enhanced accuracy
-        """
-        # Get base analysis from hybrid analyzer
-        result = self.analyzer.analyze(text)
-        base_score = result['fake_news_probability']
-        
-        # Web search verification (if enabled and score is uncertain)
-        web_search_result = None
-        web_explanation = None
-        credible_sources = 0
-        
-        if self.use_web_search and 30 < base_score < 80:
-            try:
-                print("🔍 Verifying claims via web search...")
-                web_search_result = self.web_verifier.verify_claims(text, max_searches=2)
-                
-                # Adjust score based on web search findings
-                adjustment = web_search_result['score_adjustment']
-                base_score += adjustment
-                base_score = max(0, min(base_score, 100))  # Keep in 0-100 range
-                
-                web_explanation = web_search_result['explanation']
-                credible_sources = web_search_result['credible_sources_found']
-                
-                print(f"✅ Web verification complete: {web_explanation} (adjustment: {adjustment:+.1f})")
-                
-            except Exception as e:
-                print(f"⚠️  Web search error: {e}")
-                web_explanation = "Web search unavailable"
-        
-        return {
-            "probability": round(base_score, 1),
-            "factors": {
-                "ml_probability": result['components']['ml_probability'],
-                "heuristic_score": result['components']['heuristic_score'],
-                "nlp_adjustment": result['components']['nlp_adjustment'],
-                "model_used": result['components']['model_used'],
-                "web_verification": web_explanation,
-                "credible_sources_found": credible_sources,
-                "explanation": result['explanation'],
-                "strong_fake_indicators": result['factors']['strong_fake_indicators'],
-                "absurdity_score": result['factors']['absurdity_score'],
-                "clickbait_score": result['factors']['clickbait_score'],
-                "credibility_indicators": result['factors']['credibility_indicators'],
-                "satire_detected": result['factors']['satire_detected']
-            }
-        }
 
 # Test the analyzer
 if __name__ == "__main__":
