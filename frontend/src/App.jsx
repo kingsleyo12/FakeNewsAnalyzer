@@ -9,7 +9,17 @@ function App() {
   const [url, setUrl] = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
+
+  const steps = [
+    { label: 'Initializing analysis...', progress: 10 },
+    { label: 'Scanning for fake news patterns...', progress: 30 },
+    { label: 'Verifying content originality...', progress: 50 },
+    { label: 'Assessing cyber threat levels...', progress: 75 },
+    { label: 'Finalizing comprehensive report...', progress: 90 }
+  ];
 
   const analyzeContent = async () => {
     if (text.trim().length < 10) {
@@ -18,8 +28,18 @@ function App() {
     }
 
     setLoading(true);
-    setError('');
+    setError(null);
     setResults(null);
+    setShowSuccessAnimation(false);
+    setLoadingStep(0);
+
+    // Simulate step progression
+    const stepInterval = setInterval(() => {
+      setLoadingStep(prev => {
+        if (prev < steps.length - 1) return prev + 1;
+        return prev;
+      });
+    }, 2500);
 
     try {
       // Truncate very long texts to prevent timeout (keep first 15000 chars)
@@ -32,17 +52,49 @@ function App() {
         text: analysisText,
         url: url.trim() || null
       }, {
-        timeout: 30000 // 30 second timeout
+        timeout: 45000 // Extended to 45s for deep analysis
       });
-      setResults(response.data);
+      
+      setLoadingStep(steps.length - 1); // Jump to last step
+      
+      const analysisData = response.data;
+      
+      setTimeout(() => {
+        setLoading(false); // Stop processing
+        setShowSuccessAnimation(true); // Show bank-style success
+        
+        // Final transition to results after animation
+        setTimeout(() => {
+          setShowSuccessAnimation(false);
+          setResults(analysisData);
+          setError(null);
+        }, 2200);
+      }, 500);
     } catch (err) {
+      console.error('Analysis error:', err);
+      let errorTitle = 'Analysis Aborted';
+      let errorMessage = 'The system could not complete the full analysis.';
+      let errorReason = 'A technical error occurred while communicating with the analysis engines.';
+
       if (err.code === 'ECONNABORTED') {
-        setError('Analysis timed out. Try with shorter text.');
-      } else {
-        setError(err.response?.data?.detail || 'Analysis failed. Please try again.');
+        errorReason = 'The request timed out because the analysis took longer than 45 seconds.';
+      } else if (err.response) {
+        errorReason = err.response.data?.detail || 'The server returned an internal error state.';
+      } else if (!navigator.onLine) {
+        errorTitle = 'No Internet Connection';
+        errorMessage = 'Analysis cannot proceed without a network connection.';
+        errorReason = 'Your device appears to be offline.';
       }
-    } finally {
+
+      setError({
+        title: errorTitle,
+        message: errorMessage,
+        reason: errorReason
+      });
+      setResults(null);
       setLoading(false);
+    } finally {
+      clearInterval(stepInterval);
     }
   };
 
@@ -50,7 +102,8 @@ function App() {
     setText('');
     setUrl('');
     setResults(null);
-    setError('');
+    setError(null);
+    setShowSuccessAnimation(false);
   };
 
   const getThreatColor = (level) => {
@@ -109,7 +162,7 @@ function App() {
           <div className="button-group">
             <button 
               onClick={analyzeContent} 
-              disabled={loading}
+              disabled={loading || showSuccessAnimation}
               className="btn-primary"
               aria-busy={loading}
             >
@@ -120,14 +173,56 @@ function App() {
             </button>
           </div>
 
-          {error && (
+          {/* Processing errors shown after loading completes */}
+          {!loading && error && !results && (
             <div className="error-message" role="alert">
-              {error}
+              <div className="error-title">
+                <span>⚠️</span> {error.title}
+              </div>
+              <div className="error-detail">{error.message}</div>
+              {error.reason && (
+                <div className="error-reason">
+                  <strong>Technical Cause:</strong> {error.reason}
+                </div>
+              )}
             </div>
           )}
         </section>
 
-        {results && (
+        {showSuccessAnimation && (
+          <div className="success-overlay">
+            <div className="checkmark-circle">
+              <div className="circle"></div>
+              <div className="checkmark-icon">✓</div>
+            </div>
+            <div className="success-message-text">
+              <h2>Analysis Completed</h2>
+              <p>Security & Verification Passed</p>
+            </div>
+          </div>
+        )}
+
+        {loading && (
+          <div className="loading-overlay">
+            <div className="loader-container">
+              <div className="loader-outer"></div>
+              <div className="loader-inner"></div>
+              <div className="loader-icon">🔍</div>
+            </div>
+            <div className="loading-text">
+              <h2>Deep Analysis in Progress</h2>
+              <div className="loading-step">{steps[loadingStep].label}</div>
+            </div>
+            <div className="loading-progress-container">
+              <div 
+                className="loading-progress-bar" 
+                style={{ width: `${steps[loadingStep].progress}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        {!loading && results && (
           <section className="results-section" aria-live="polite">
             <h2>Analysis Results</h2>
             
@@ -316,27 +411,54 @@ function App() {
 }
 
 function FactorCard({ title, factors }) {
+  // Extract explanation to show it as a primary summary at the top
+  const { explanation, detected_threats, ...otherFactors } = factors;
+  
+  const formatValue = (key, value) => {
+    if (typeof value === 'boolean') return value ? '✅ Yes' : '❌ No';
+    if (value === null || value === undefined) return 'N/A';
+    
+    // Define which keys are percentages
+    const percentageKeys = [
+      'probability', 'score', 'ml_probability', 'heuristic_score', 
+      'nlp_adjustment', 'absurdity_score', 'clickbait_score', 
+      'fact_check_confidence', 'risk_score'
+    ];
+    
+    const isPercentage = percentageKeys.some(p => key.includes(p));
+    
+    if (typeof value === 'number') {
+      return isPercentage ? `${value}%` : value;
+    }
+    
+    return value;
+  };
+
   return (
     <div className="factor-card">
       <h4>{title}</h4>
-      <ul>
-        {Object.entries(factors).map(([key, value]) => {
-          if (key === 'explanation' || key === 'detected_threats') {
-            return (
-              <li key={key} className="explanation">
-                <strong>{key === 'explanation' ? 'Summary' : 'Threats'}:</strong> {
-                  Array.isArray(value) ? value.join(', ') : value
-                }
-              </li>
-            );
+      
+      {explanation && (
+        <div className="card-summary">
+          <strong>Summary:</strong> {explanation}
+        </div>
+      )}
+
+      {detected_threats && (
+        <div className="card-summary threats">
+          <strong>Detected Threats:</strong> {
+            Array.isArray(detected_threats) ? detected_threats.join(', ') : detected_threats
           }
-          return (
-            <li key={key}>
-              <span className="factor-name">{key.replace(/_/g, ' ')}:</span>
-              <span className="factor-value">{typeof value === 'number' ? `${value}%` : value}</span>
-            </li>
-          );
-        })}
+        </div>
+      )}
+
+      <ul>
+        {Object.entries(otherFactors).map(([key, value]) => (
+          <li key={key}>
+            <span className="factor-name">{key.replace(/_/g, ' ')}:</span>
+            <span className="factor-value">{formatValue(key, value)}</span>
+          </li>
+        ))}
       </ul>
     </div>
   );
