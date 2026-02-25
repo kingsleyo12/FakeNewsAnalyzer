@@ -59,7 +59,8 @@ class AnalysisRequest(BaseModel):
 class AnalysisResponse(BaseModel):
     """Response model with percentage-based scores"""
     fake_news_probability: float = Field(..., ge=0, le=100, description="Fake news probability (0-100%)")
-    authenticity_score: float = Field(..., ge=0, le=100, description="Authenticity/real news score (0-100%)")
+    news_authenticity_score: float = Field(..., ge=0, le=100, description="Authenticity score derived from fake news probability (0-100%)")
+    cyber_authenticity_score: float = Field(..., ge=0, le=100, description="Safety score derived from cyber threat risk (0-100%)")
     originality_score: float = Field(..., ge=0, le=100, description="Content originality score (0-100%)")
     cyber_threat_risk: float = Field(..., ge=0, le=100, description="Cyber threat risk score (0-100%)")
     threat_level: str = Field(..., description="Threat level label (Low/Medium/High/Critical)")
@@ -122,16 +123,18 @@ async def analyze_content(request: AnalysisRequest):
                 detail="Full comprehensive analysis could not be completed. One or more verification modules (ML, Fact Checker, or Web Verifier) are currently unavailable."
             )
 
-        # Calculate authenticity as the overall credibility (considering both fake news and threats)
-        max_risk = max(fake_news_result["probability"], cyber_threat_result["risk_score"])
-        authenticity_score = 100 - max_risk
-        
+        # News authenticity: how credible the content is from a fake-news perspective
+        news_authenticity_score = round(100 - fake_news_result["probability"], 1)
+        # Cyber authenticity: how safe the content is from a threat perspective
+        cyber_authenticity_score = round(100 - cyber_threat_result["risk_score"], 1)
+
         # Determine threat level based on cyber threat risk
         threat_level = get_threat_level(cyber_threat_result["risk_score"])
         
         result = AnalysisResponse(
             fake_news_probability=round(fake_news_result["probability"], 1),
-            authenticity_score=round(authenticity_score, 1),
+            news_authenticity_score=news_authenticity_score,
+            cyber_authenticity_score=cyber_authenticity_score,
             originality_score=round(originality_result["score"], 1),
             cyber_threat_risk=round(cyber_threat_result["risk_score"], 1),
             threat_level=threat_level,

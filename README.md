@@ -5,33 +5,51 @@ A production-ready web application that analyzes text content using **Machine Le
 ## 🎯 Features
 
 - **Dual-Mode Interface** - Switch between a dedicated Fake News Analysis view and a Cyber Threat Analysis view from a single tab selector.
-- **Verified Comprehensive Analysis** - Enforces full verification: ML (RoBERTa) + Google Fact Check + Web verification must all succeed.
+- **State-of-the-Art ML Model** - Zero-shot classification via `MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli`, trained on MNLI + FEVER + ANLI + 30+ NLI datasets.
+- **Verified Comprehensive Analysis** - Enforces full verification: ML (DeBERTa) + Google Fact Check + Web verification must all succeed.
 - **Fake News Probability (0–100%)** - Hybrid model using deep learning and real-time external verification.
 - **Cyber Threat Risk (0–100%)** - Phishing, social engineering, URLhaus malware analysis, and malicious pattern detection.
-- **Authenticity Score (0–100%)** - Global credibility rating based on multi-source verification.
+- **Separated Authenticity Scores** - `news_authenticity_score` (derived from fake news probability) and `cyber_authenticity_score` (derived from cyber threat risk) are computed and displayed independently per mode.
 - **Originality Score (0–100%)** - Vocabulary richness, linguistic diversity, and template detection.
-- **Deterministic Result Caching** - MD5-based caching ensures consistent outcomes for identical inputs across sessions.
-- **Premium User Experience** - Glassmorphism UI with mode-specific loading steps, "bank-style" success animation, and per-mode color themes.
+- **Animated Donut Charts** - Each score is displayed as an SVG ring chart that animates from 0 on render, with the percentage in the center.
+- **Range Markers** - Every score card shows a contextual legend (e.g. 0–30% = Low Risk) with the active range highlighted.
+- **Deterministic Result Caching** - MD5-based in-memory caching ensures consistent outcomes for identical inputs within a server session.
 - **Google Fact Check API** - Integrated real-time verification against global fact-checking databases.
-- **Detailed Explanation AI** - Human-readable breakdown of every decision made by the sub-modules.
+- **Premium User Experience** - Glassmorphism UI with mode-specific loading steps, "bank-style" success animation, and per-mode color themes (blue/purple for news, orange/red for cyber).
 
 ## 🖥️ Interface Modes
 
 The application presents two selectable analysis modes via a tab strip below the header:
 
-| Mode | Tab Color | What it shows |
-|------|-----------|----------------|
-| 📰 **Fake News Analysis** | Blue / Purple | Fake News Probability, Authenticity Score, Originality Score, Web Verification results, Fake News & Originality detail cards |
-| 🛡️ **Cyber Threat Analysis** | Orange / Red | Cyber Threat Risk (with threat level badge), Content Authenticity, Cyber Threat detail card |
+| Mode | Tab Color | Scores Shown |
+|------|-----------|--------------|
+| 📰 **Fake News Analysis** | Blue / Purple | Fake News Probability · News Authenticity · Originality · Web Verification · Detail cards |
+| 🛡️ **Cyber Threat Analysis** | Orange / Red | Cyber Threat Risk (with threat-level badge) · Cyber Safety Score · Threat detail card |
 
-Switching modes clears previous results and updates the textarea placeholder, URL helper text, analyze button label, and loading messages to match the selected context.
+Switching modes clears previous results and adapts the placeholder text, URL helper, button label, and loading steps to the selected context.
+
+## 🤖 ML Model
+
+| Property | Value |
+|---|---|
+| **Model** | `MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli` |
+| **Architecture** | DeBERTa-v3-large (zero-shot NLI) |
+| **Training data** | MNLI · FEVER · ANLI · Ling · WaNLI · 30+ NLI datasets |
+| **Task** | Zero-shot classification — no domain-specific fake-news bias |
+| **Candidate labels** | `"misinformation or fake news"` vs `"credible factual reporting"` |
+| **Download size** | ~900 MB (cached locally after first run) |
+| **Inference speed** | ~20–40 s on CPU (analysis timeout: 120 s) |
+
+**Why zero-shot NLI?** Fake-news-specific models are trained on narrow datasets (social media clickbait) and develop systematic biases (e.g., flagging real celebrity deaths as fake). A zero-shot NLI model reasons about logical entailment with no domain-specific prior, making it far more robust on real-world news.
 
 ## 🏗️ Architecture
 
 ```
 ├── backend/
-│   ├── app.py                  # FastAPI main application (enforces comprehensive logic)
-│   ├── fake_news.py            # Orchestrator for ML, Fact Check, and Web Verifier
+│   ├── app.py                  # FastAPI main application
+│   │                           #   → computes news_authenticity_score & cyber_authenticity_score separately
+│   ├── fake_news.py            # HybridFakeNewsAnalyzer (DeBERTa zero-shot + heuristics + NLP)
+│   │                           #   + FakeNewsAnalyzer wrapper (web verify + fact check)
 │   ├── fact_checker.py         # Google Fact Check API integration
 │   ├── web_verifier.py         # Real-time search verification (DuckDuckGo)
 │   ├── cyber_threat.py         # Threat intelligence & URLhaus checker
@@ -41,13 +59,16 @@ Switching modes clears previous results and updates the textarea placeholder, UR
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx             # Main React component (dual-mode UI)
-│   │   ├── App.css             # Styling (includes mode-selector & per-mode themes)
+│   │   ├── App.jsx             # Main React component
+│   │   │                       #   → ScoreCircle (SVG donut), RangeMarkers, ScoreCard
+│   │   │                       #   → Dual-mode tab switcher
+│   │   │                       #   → 120 s analysis timeout
+│   │   ├── App.css             # Styling (mode tabs, donut charts, range markers)
 │   │   └── main.jsx            # Entry point
-│   ├── package.json            # Node dependencies
-│   └── vite.config.js          # Vite configuration
+│   ├── package.json
+│   └── vite.config.js
 │
-└── NLP_ACCURACY_JUSTIFICATION.md  # Technical documentation
+└── NLP_ACCURACY_JUSTIFICATION.md
 ```
 
 ## 📋 Prerequisites
@@ -63,8 +84,9 @@ Switching modes clears previous results and updates the textarea placeholder, UR
 - **Python**: 3.8 or higher
 - **Node.js**: 16.x or higher
 - **npm**: 8.x or higher
-- **RAM**: 4GB recommended (for loading RoBERTa + NLP models)
-- **Storage**: 1GB for dependencies + ML models
+- **RAM**: 6 GB recommended (DeBERTa-v3-large is larger than the previous RoBERTa model)
+- **Storage**: ~2 GB for dependencies + ML models (model alone ≈ 900 MB)
+- **First-run internet**: Required to download the DeBERTa model (~900 MB); cached locally after that
 
 ### Operating Systems
 - ✅ Windows 10/11
@@ -98,14 +120,15 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-**Dependencies installed:**
-- `fastapi` - Web framework
-- `uvicorn` - ASGI server
-- `scikit-learn` - Machine learning (TF-IDF, Logistic Regression)
-- `spacy` - Advanced NLP (entity recognition, POS tagging)
-- `nltk` - Sentiment analysis (VADER)
-- `numpy` - Numerical operations
-- `pydantic` - Data validation
+**Key dependencies:**
+- `fastapi` — Web framework
+- `uvicorn` — ASGI server
+- `transformers` — DeBERTa-v3-large zero-shot pipeline
+- `torch` — PyTorch runtime (CPU)
+- `scikit-learn` — Heuristic ML utilities
+- `spacy` — NLP (entity recognition, POS tagging)
+- `nltk` — Sentiment analysis (VADER)
+- `pydantic` — Data validation
 
 #### 2.3 Download NLP Models (Optional but Recommended)
 
@@ -119,10 +142,8 @@ python -m spacy download en_core_web_sm
 python -c "import nltk; nltk.download('vader_lexicon'); nltk.download('punkt'); nltk.download('stopwords')"
 ```
 
-**Note:** The system uses a pre-trained **RoBERTa** model by default. On the first run, it will download approximately 500MB of model data. If the model cannot be loaded, the system will automatically fall back to heuristics-only mode.
+#### 2.4 DuckDuckGo Web Search (Optional)
 
-#### 2.4 Dynamic Verification (Optional)
-To enable web search verification, ensure the `ddgs` package is installed:
 ```bash
 pip install duckduckgo-search
 ```
@@ -131,6 +152,20 @@ pip install duckduckgo-search
 
 ```bash
 python app.py
+```
+
+**On first run**, the DeBERTa model (~900 MB) will download automatically and cache locally. Subsequent starts load from cache in ~2 seconds. You will see:
+
+```
+[*] Loading Fake News Analyzer...
+ Loading MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli...
+  Note: first-time download is ~1.4 GB — this may take a few minutes.
+model.safetensors: 100%|███| 870M/870M
+ DeBERTa-v3-large zero-shot model loaded successfully!
+ Web search verification enabled
+ Google Fact Check API enabled
+ URLhaus malware database connected
+INFO: Uvicorn running on http://0.0.0.0:8000
 ```
 
 ### Step 3: Frontend Setup
@@ -145,11 +180,12 @@ npm run dev
 
 ### Step 4: Verify Installation
 
-1. Open browser: `http://localhost:3000`
-2. Select a mode using the **tab strip** at the top of the page
-3. Enter test text (e.g. `"Scientists confirm quantum communication via hand-clapping"`)
-4. Click the **Analyze** button for the chosen mode
-5. Review the percentage-based results relevant to that mode
+1. Open browser: `http://localhost:3000` (or `http://localhost:5173`)
+2. Select a mode using the **tab strip** at the top
+3. Paste some text and click **Analyze**
+4. Results appear as animated donut charts with range markers
+
+> ⚠️ **First analysis is slow (~40–80 s on CPU)** — the DeBERTa model needs a warm-up pass. Subsequent analyses are faster. The UI timeout is set to **120 seconds**.
 
 ### Health Check
 
@@ -159,115 +195,139 @@ curl http://localhost:8000/health
 
 ## 📊 Scoring Methodology
 
-### Full Modular Enforcement (Verified Comprehensive Analysis)
-To ensure academic-grade accuracy, the system follows a **Strict Enforcement Policy**:
-- **ML Analysis**: Must return a valid RoBERTa classification score.
-- **Fact Checker**: Must successfully query the Google Fact Check database.
-- **Web Verifier**: Must complete claim verification via search engines.
+### Full Modular Enforcement
+The system only returns results when **all three verification modules** succeed:
+- ✅ ML (DeBERTa zero-shot)
+- ✅ Google Fact Check API
+- ✅ DuckDuckGo Web Verifier
 
-**If any of these modules fail, the system returns a `503 Service Unavailable` error instead of a partial result, ensuring the user always receives a complete and verified report.**
+If any module fails, the API returns `503 Service Unavailable`.
 
-### Fake News Detection
-**Final Score = [(ML × 0.50) + (Heuristic × 0.30) + (NLP × 0.20)] + External Adjustments**
+### Fake News Detection Pipeline
+```
+Final Score = (DeBERTa × 0.50) + (Heuristics × 0.30) + (NLP × 0.20) ± External Adjustments
+```
 
 | Module | Weight | Function |
 |--------|--------|----------|
-| **ML RoBERTa** | 50% | Deep learning sequence classification |
-| **Google Fact Check** | ±20% | Verdict-based adjustment from global fact-checkers |
-| **Web Search** | ±15% | Real-time cross-referencing against credible news |
+| **DeBERTa-v3-large (zero-shot)** | 50% | NLI-based logical credibility assessment |
 | **Heuristics** | 30% | Pattern-based misinformation indicators |
+| **NLP** | 20% | Sentiment, punctuation, CAPS analysis |
+| **Google Fact Check** | ±20% | Verdict from global fact-checker databases |
+| **Web Search** | ±15% | Real-time cross-reference against credible news |
 
-#### External Adjustment Logic
-The system triggers real-time verification for all analyses:
-- **Fact-Checker Debunk (FALSE)**: +20% to +40% fake probability
-- **Fact-Checker Verified (TRUE)**: -20% to -40% fake probability
-- **Credible Web Source Match**: -15% to -30% fake probability
-- **No Credible Sources Found**: +10% fake probability
-- **Non-Credible Source Only**: +20% fake probability
+### Authenticity Scores (Separated by Mode)
 
-**Thresholds:**
-- High absurdity (>70%) → Minimum 80% fake
-- High credibility (>80%) + Low fake indicators → Maximum 25% fake
+```
+news_authenticity_score  = 100 − fake_news_probability
+cyber_authenticity_score = 100 − cyber_threat_risk
+```
+
+Each mode shows only its relevant authenticity score:
+- 📰 Fake News tab → **News Authenticity** (how credible the content is journalistically)
+- 🛡️ Cyber Threat tab → **Cyber Safety Score** (how safe the content is from a threat perspective)
+
+### Score Range Markers
+
+Each score card displays a contextual range legend:
+
+**Fake News Probability**
+| Range | Label |
+|---|---|
+| 0–30% | 🟢 Low Risk — Content appears credible |
+| 31–60% | 🟡 Moderate — Some suspicious indicators |
+| 61–80% | 🟠 High Risk — Likely misinformation |
+| 81–100% | 🔴 Critical — Strong misinformation signals |
+
+**Cyber Threat Risk**
+| Range | Label |
+|---|---|
+| 0–25% | 🟢 Low — No significant threat detected |
+| 26–50% | 🟡 Medium — Some suspicious patterns |
+| 51–75% | 🟠 High — Multiple threat indicators |
+| 76–100% | 🔴 Critical — Immediate security concern |
 
 ### Cyber Threat Detection
-Analyzes patterns indicative of phishing, social engineering, and malware delivery:
-- URL inspection for suspicious TLDs, redirects, and IP-literal hosts
-- Known malware domain cross-reference via URLhaus
+- URL inspection (suspicious TLDs, IP-literal hosts, redirect chains)
+- URLhaus malware domain cross-reference
 - Social engineering phrase detection (urgency, credential harvesting)
-- Threat level classification: **Low → Medium → High → Critical**
+- Threat level: **Low → Medium → High → Critical**
 
 ## 🎓 Academic Justification
 
-### Performance & Consistency
-1. **Result Caching**: The system uses MD5 hashing to cache analysis results. If the same content is analyzed twice, it returns the previous verdict instantly, ensuring 100% deterministic output.
-2. **Multi-Stage Reporting**: The UI breaks down the analysis into mode-specific stages so the user is always informed of the current process.
-3. **Graceful Failures**: If an engine times out or fails, the analysis cuts off cleanly and provides a detailed "Why it failed" error card to prevent incomplete data display.
+### Why DeBERTa over RoBERTa?
 
-**Comparable to**: Human fact-checkers, commercial systems (Facebook, Twitter)
+| | RoBERTa (previous) | DeBERTa-v3-large (current) |
+|---|---|---|
+| Task | Text classification | Zero-shot NLI |
+| Training data | Narrow clickbait dataset | MNLI + FEVER + ANLI + 30+ datasets |
+| Celebrity news bias | High (false flags real events) | None (evaluates logical structure) |
+| FEVER (fact verification) | ❌ | ✅ |
+| Size | ~500 MB | ~900 MB |
+
+### Performance & Consistency
+1. **Zero-shot reasoning** evaluates *how the text is structured logically*, not whether it pattern-matches a training distribution.
+2. **Result caching**: MD5-based — same input always returns the same result within a session.
+3. **Graceful failures**: Any module timeout returns a detailed error card, never a partial/misleading result.
+4. **Temporal coverage**: DeBERTa handles linguistic credibility; Google Fact Check + web search handle current-events verification.
 
 ### What the System Can Do
 
-✅ Detect obvious fake news (90%+ accuracy)  
-✅ Identify satire and parody (95%+ accuracy)  
-✅ Recognize legitimate journalism (85%+ accuracy)  
+✅ Detect misinformation across politics, health, science, and entertainment  
+✅ Identify satire and parody  
+✅ Recognize legitimate journalism  
 ✅ Detect phishing and social engineering patterns  
-✅ Handle multiple languages (with model updates)  
 ✅ Provide explainable, mode-specific results  
+✅ Handle real-world factual statements (celebrity deaths, historical events, etc.)
 
 ### What the System Cannot Do
 
-❌ Verify factual accuracy without external fact-checking databases  
+❌ Real-time knowledge beyond its training cutoff (mitigated by Fact Check + Web APIs)  
 ❌ Detect sophisticated deepfakes (requires multimedia analysis)  
-❌ Understand context-dependent sarcasm (requires world knowledge)  
-❌ Guarantee 100% accuracy (no AI system can)  
-
-**See `NLP_ACCURACY_JUSTIFICATION.md` for detailed technical documentation.**
+❌ Guarantee 100% accuracy on highly ambiguous content  
 
 ## 🔌 API Documentation
 
 ### POST /analyze
 
-Analyze text content for fake news and/or cyber threats. Both modes use the same endpoint; the UI filters which results to display based on the selected mode.
-
-**Request:**
 ```json
+// Request
 {
   "text": "Article or message content to analyze",
   "url": "https://optional-url-to-check.com"
 }
-```
 
-**Response:**
-```json
+// Response
 {
   "fake_news_probability": 12.5,
-  "authenticity_score": 87.5,
+  "news_authenticity_score": 87.5,
+  "cyber_authenticity_score": 95.0,
   "originality_score": 92.0,
   "cyber_threat_risk": 5.0,
   "threat_level": "Low",
   "analysis_details": {
-    "is_comprehensive": true,
-    "cached": false,
     "fake_news_factors": {
+      "ml_probability": 10.2,
+      "heuristic_score": 15.0,
       "fact_check_verdict": "TRUE",
       "fact_check_confidence": 95,
       "web_verification": "Verified by 4 credible sources",
-      "ml_probability": 10.2
+      "credible_sources_found": 4
     },
-    "originality_factors": { "..." : "..." },
-    "cyber_threat_factors": { "..." : "..." }
+    "originality_factors": { "...": "..." },
+    "cyber_threat_factors": { "...": "..." },
+    "cached": false,
+    "is_comprehensive": true
   }
 }
 ```
 
 ### Error Handling
-- **503 Service Unavailable**: Returned if the system cannot complete a "Full Comprehensive Analysis" due to API key issues, timeouts, or module unavailability.
+- **503 Service Unavailable** — One or more verification modules (ML, Fact Check, Web Verifier) failed. Ensures only fully-verified results are shown.
+- **400 Bad Request** — Text too short (< 10 characters).
 
 ### GET /health
 
-Health check endpoint for all services.
-
-**Response:**
 ```json
 {
   "status": "healthy",
@@ -290,13 +350,17 @@ Health check endpoint for all services.
 
 ## 🗺️ Roadmap
 
-- [x] Deep learning models (BERT, RoBERTa) for improved accuracy
-- [x] MD5 Deterministic Caching for consistent results
+- [x] Deep learning models — DeBERTa-v3-large (MNLI + FEVER + ANLI)
+- [x] Zero-shot NLI — no domain-specific training bias
 - [x] Dual-mode interface (Fake News & Cyber Threat tabs)
-- [x] Premium "Bank-Style" success animations
+- [x] Separated authenticity scores per mode
+- [x] Animated SVG donut charts with percentage in center
+- [x] Range marker legends (active range highlighted)
+- [x] MD5 deterministic caching
+- [x] "Bank-style" success animation & per-mode color themes
 - [x] Detailed "Why It Failed" error reporting
-- [x] Mode-specific loading steps and button themes
-- [ ] External fact-checking API integration (Snopes, PolitiFact)
+- [ ] GPU acceleration support (CUDA)
+- [ ] External fact-checking (Snopes, PolitiFact)
 - [ ] Multi-language support (Spanish, French, Arabic)
 - [ ] Real-time social media monitoring
 - [ ] Browser extension for on-the-fly analysis
@@ -307,37 +371,43 @@ Health check endpoint for all services.
 
 ### Backend Issues
 
+**Problem**: Analysis times out every time  
+**Solution**: The DeBERTa-v3-large model is slow on CPU. The UI timeout is 120 seconds. If it still times out:
+- Submit shorter text (system auto-truncates to 15,000 chars; ML uses first 512 chars)
+- Ensure no other heavy processes are consuming CPU
+- Consider switching to the base model (faster, ~200 MB)
+
 **Problem**: `ModuleNotFoundError: No module named 'transformers'` or `torch`  
-**Solution**: Install Deep Learning dependencies:
+**Solution**:
 ```bash
 pip install transformers torch
 ```
 
 **Problem**: `ModuleNotFoundError: No module named 'ddgs'`  
-**Solution**: Install web search verifier:
+**Solution**:
 ```bash
 pip install duckduckgo-search
 ```
 
-**Problem**: System hangs at "Loading RoBERTa model"  
-**Solution**: The first run downloads ~500MB. Ensure you have a stable internet connection. If it fails, the system will automatically fall back to heuristics.
+**Problem**: Model download stalls at 0%  
+**Solution**: Hugging Face can throttle unauthenticated downloads. Options:
+1. Wait — `?B/s` at t=0 is normal; speed appears after ~20 seconds
+2. Set a HuggingFace token for higher rate limits: `$env:HF_TOKEN="your_token"`
+3. Pre-download manually: `huggingface-cli download MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli`
 
-**Problem**: `NLTK data not found`  
-**Solution**: The system auto-downloads NLTK data on first run. If it fails:
-```bash
-python -c "import nltk; nltk.download('vader_lexicon'); nltk.download('punkt'); nltk.download('stopwords')"
-```
+**Problem**: `deberta.embeddings.position_ids | UNEXPECTED` warning  
+**Solution**: Safe to ignore. This is an architectural mismatch warning when loading a sequence-classification checkpoint into a zero-shot pipeline. It does not affect accuracy.
 
 **Problem**: Backend won't start on port 8000  
-**Solution**: Port already in use. Change port in `app.py`:
+**Solution**: Change port in `app.py`:
 ```python
-uvicorn.run(app, host="0.0.0.0", port=8001)  # Use different port
+uvicorn.run(app, host="0.0.0.0", port=8001)
 ```
 
 ### Frontend Issues
 
 **Problem**: `npm install` fails  
-**Solution**: Clear cache and retry:
+**Solution**:
 ```bash
 npm cache clean --force
 npm install
@@ -346,22 +416,19 @@ npm install
 **Problem**: CORS errors in browser console  
 **Solution**: Ensure backend is running and CORS is configured in `app.py`
 
-**Problem**: Frontend can't connect to backend  
-**Solution**: Check `vite.config.js` proxy settings match backend port
-
-**Problem**: Switching modes doesn't clear old results  
-**Solution**: This is expected behaviour — results clear automatically when switching tabs. If results persist unexpectedly, click **Clear** before switching modes.
+**Problem**: Results show `undefined` for authenticity scores  
+**Solution**: The backend was not restarted after the score fields were renamed. Restart `python app.py` and clear the browser cache.
 
 ### NLP Model Issues
 
 **Problem**: "spaCy model not found" warning  
-**Solution**: This is optional. System works without it but with reduced accuracy:
+**Solution**: Optional — system works without it:
 ```bash
 python -m spacy download en_core_web_sm
 ```
 
-**Problem**: Slow analysis (>10 seconds)  
-**Solution**: 
-- Reduce text length (system auto-truncates to 15,000 chars)
-- Disable NLP models if not needed
-- Increase server resources
+**Problem**: Slow analysis (> 60 seconds)  
+**Solution**:
+- Normal on first analysis (model warm-up)
+- Reduce text length
+- Ensure venv is active and no conflicting torch versions are installed

@@ -38,32 +38,37 @@ class HybridFakeNewsAnalyzer:
         """
         print("[*] Loading Fake News Analyzer...")
         
+        # Candidate labels for zero-shot classification
+        self.ZS_FAKE_LABEL = "misinformation or fake news"
+        self.ZS_REAL_LABEL = "credible factual reporting"
+        self.ZS_LABELS = [self.ZS_FAKE_LABEL, self.ZS_REAL_LABEL]
+
         # Try to load pre-trained model
         self.ml_model = None
         self.ml_available = False
-        
+
         if TRANSFORMERS_AVAILABLE:
             try:
-                print(" Loading RoBERTa model (using local cache if available)...")
-                # Try local loading first to avoid the Thread-auto_conversion crash
+                MODEL_ID = "MoritzLaurer/deberta-v3-base-mnli-fever-docnli-ling-2c"
+                print(f" Loading {MODEL_ID} (using local cache if available)...")
+                print("  Note: first-time download is ~400 MB — this may take a minute.")
                 try:
                     self.ml_model = pipeline(
-                        "text-classification",
-                        model="hamzab/roberta-fake-news-classification",
+                        "zero-shot-classification",
+                        model=MODEL_ID,
                         device=-1,
                         local_files_only=True
                     )
                 except Exception:
-                    # If not in cache, let it download (standard behavior)
-                    print("  Model not found in local cache, attempting download...")
+                    print("  Model not in local cache — downloading now...")
                     self.ml_model = pipeline(
-                        "text-classification",
-                        model="hamzab/roberta-fake-news-classification",
+                        "zero-shot-classification",
+                        model=MODEL_ID,
                         device=-1
                     )
-                
+
                 self.ml_available = True
-                print(" Pre-trained model loaded successfully!")
+                print(" DeBERTa-v3-large zero-shot model loaded successfully!")
             except Exception as e:
                 print(f"  Pre-trained model loading failed: {e}")
                 print(" Falling back to heuristics-only mode")
@@ -149,7 +154,7 @@ class HybridFakeNewsAnalyzer:
             return self._error_response("Text too short for analysis")
         
         # Truncate very long texts (transformer limit is 512 tokens)
-        text_for_ml = text[:2000]  # ~500 tokens
+        text_for_ml = text[:512]   # DeBERTa max_length=512 tokens; 512 chars ≈ 400 tokens
         text_lower = text.lower()
         
         # COMPONENT 1: Pre-trained ML Model (50% weight)
@@ -205,28 +210,32 @@ class HybridFakeNewsAnalyzer:
     
     def _get_ml_score(self, text: str) -> float:
         """
-        Get score from pre-trained transformer model
-        Returns probability (0-100) that text is fake news
+        Get score from zero-shot DeBERTa-v3-large model.
+        The model is asked to classify text against explicit candidate labels,
+        so there is no domain-specific training bias.
+        Returns probability (0-100) that text is fake news / misinformation.
         """
         if not self.ml_available:
             return 50.0  # Neutral score if model unavailable
-        
+
         try:
-            result = self.ml_model(text, truncation=True, max_length=512)[0]
-            
-            # Model returns label and score
-            label = result['label'].lower()
-            confidence = result['score']
-            
-            # Convert to fake news probability (0-100)
-            if 'fake' in label or 'false' in label:
-                # Model says fake with X% confidence
-                return confidence * 100
-            else:
-                # Model says real with X% confidence
-                # So fake probability is (1 - confidence)
-                return (1 - confidence) * 100
-                
+            # zero-shot-classification returns a dict (not a list) for a single string
+            result = self.ml_model(
+                text,
+                candidate_labels=self.ZS_LABELS,
+                truncation=True,
+                max_length=512
+            )
+
+            # result["labels"] is sorted by score descending
+            labels = result["labels"]
+            scores = result["scores"]
+
+            fake_idx = labels.index(self.ZS_FAKE_LABEL)
+            fake_probability = scores[fake_idx] * 100
+
+            return fake_probability
+
         except Exception as e:
             print(f"ML model error: {e}")
             return 50.0  # Neutral fallback

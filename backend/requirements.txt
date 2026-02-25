@@ -9,7 +9,8 @@ python-dotenv==1.0.0
 # Machine Learning - MUST BE INSTALLED for Full Comprehensive Analysis
 transformers==4.36.0
 torch==2.1.0
-sentencepiece==0.1.99
+sentencepiece>=0.2.1
+protobuf>=4.0.0
 
 # NLP and Linguistic Analysis
 nltk==3.8.1

@@ -567,6 +567,82 @@
   color: #9ca3af;
 }
 
+/* Score Circle */
+.score-circle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.score-circle {
+  filter: drop-shadow(0 0 8px rgba(0,0,0,0.4));
+}
+
+/* Threat badge (now sits below chart) */
+.threat-badge {
+  padding: 0.25rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Range Markers */
+.range-markers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+  width: 100%;
+}
+
+.range-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  background: transparent;
+  transition: background 0.2s;
+  opacity: 0.45;
+}
+
+.range-item--active {
+  opacity: 1;
+  background: rgba(255,255,255,0.05);
+}
+
+.range-bar {
+  flex-shrink: 0;
+  width: 4px;
+  height: 32px;
+  border-radius: 2px;
+  margin-top: 1px;
+}
+
+.range-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.range-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e4e4e4;
+  line-height: 1.2;
+}
+
+.range-desc {
+  font-size: 0.72rem;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
 /* Details Section */
 .details-section {
   background: rgba(255, 255, 255, 0.03);
