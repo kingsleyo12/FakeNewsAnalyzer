@@ -3,7 +3,17 @@ Web Search Verifier
 Verifies news claims by searching credible sources online
 """
 
-from ddgs import DDGS
+try:
+    from ddgs import DDGS
+except ImportError:
+    try:
+        from duckduckgo_search import DDGS
+    except ImportError:
+        # Define a dummy DDGS if both fail
+        class DDGS:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def text(self, *args, **kwargs): return []
 import re
 from typing import Dict, List, Optional
 import time
@@ -216,21 +226,21 @@ class WebSearchVerifier:
         """
         adjustment = 0
         
-        # If debunked by fact-checkers → strong evidence of fake news
+        # If debunked by fact-checkers  strong evidence of fake news
         if debunked:
             adjustment += 40  # Major increase
         
-        # If found on fact-check sites but not debunked → might be verified true
+        # If found on fact-check sites but not debunked  might be verified true
         elif fact_check_found:
             adjustment -= 20  # Decrease fake score
         
-        # If found on multiple credible sources → likely real news
+        # If found on multiple credible sources  likely real news
         if credible_count >= 3:
             adjustment -= 30  # Strong decrease
         elif credible_count >= 1:
             adjustment -= 15  # Moderate decrease
         
-        # If no results found at all → suspicious (but could be very new)
+        # If no results found at all  suspicious (but could be very new)
         if total_results == 0:
             adjustment += 10  # Slight increase
         
@@ -281,7 +291,7 @@ if __name__ == "__main__":
     you to know this!
     """
     
-    print("\n📰 Test 1: Fake News Claim")
+    print("\n Test 1: Fake News Claim")
     print("-" * 60)
     print("Searching web for verification...")
     result1 = verifier.verify_claims(test1)
@@ -298,7 +308,7 @@ if __name__ == "__main__":
     was published in the journal Nature.
     """
     
-    print("\n📰 Test 2: Real News with Credible Source")
+    print("\n Test 2: Real News with Credible Source")
     print("-" * 60)
     print("Searching web for verification...")
     result2 = verifier.verify_claims(test2)
@@ -308,5 +318,5 @@ if __name__ == "__main__":
     print(f"Explanation: {result2['explanation']}")
     
     print("\n" + "="*60)
-    print("✅ Test Complete!")
+    print(" Test Complete!")
     print("="*60)

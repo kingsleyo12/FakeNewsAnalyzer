@@ -1,35 +1,48 @@
 # Fake News & Cyber Threat Intelligence Analyzer
 
-A production-ready web application that analyzes text content using **Machine Learning + NLP** and outputs **percentage-based confidence scores** for fake news detection, originality analysis, and cyber threat intelligence.
+A production-ready web application that analyzes text content using **Machine Learning + NLP** and outputs **percentage-based confidence scores** across two dedicated analysis interfaces: **Fake News Detection** and **Cyber Threat Intelligence**.
 
 ## 🎯 Features
 
-- **Fake News Probability (0-100%)** - Hybrid model: ML (RoBERTa Transformer) + Heuristics + NLP
-- **Deterministic Multi-Stage Analysis** - MD5-based result caching ensure consistent outcomes for identical inputs
-- **Premium User Experience** - High-end glassmorphism UI with "bank-style" success verification and step-by-step loading
-- **Web Search Verification** - Cross-references claims against credible news sources and fact-checkers in real-time
-- **Authenticity Score (0-100%)** - Inverse of fake news probability
-- **Originality Score (0-100%)** - Vocabulary richness, linguistic diversity, content uniqueness
-- **Cyber Threat Risk (0-100%)** - Phishing, social engineering, URL analysis, malicious patterns
-- **Detailed Explanation AI** - Human-readable breakdown of Why an analysis failed or passed
+- **Dual-Mode Interface** - Switch between a dedicated Fake News Analysis view and a Cyber Threat Analysis view from a single tab selector.
+- **Verified Comprehensive Analysis** - Enforces full verification: ML (RoBERTa) + Google Fact Check + Web verification must all succeed.
+- **Fake News Probability (0–100%)** - Hybrid model using deep learning and real-time external verification.
+- **Cyber Threat Risk (0–100%)** - Phishing, social engineering, URLhaus malware analysis, and malicious pattern detection.
+- **Authenticity Score (0–100%)** - Global credibility rating based on multi-source verification.
+- **Originality Score (0–100%)** - Vocabulary richness, linguistic diversity, and template detection.
+- **Deterministic Result Caching** - MD5-based caching ensures consistent outcomes for identical inputs across sessions.
+- **Premium User Experience** - Glassmorphism UI with mode-specific loading steps, "bank-style" success animation, and per-mode color themes.
+- **Google Fact Check API** - Integrated real-time verification against global fact-checking databases.
+- **Detailed Explanation AI** - Human-readable breakdown of every decision made by the sub-modules.
+
+## 🖥️ Interface Modes
+
+The application presents two selectable analysis modes via a tab strip below the header:
+
+| Mode | Tab Color | What it shows |
+|------|-----------|----------------|
+| 📰 **Fake News Analysis** | Blue / Purple | Fake News Probability, Authenticity Score, Originality Score, Web Verification results, Fake News & Originality detail cards |
+| 🛡️ **Cyber Threat Analysis** | Orange / Red | Cyber Threat Risk (with threat level badge), Content Authenticity, Cyber Threat detail card |
+
+Switching modes clears previous results and updates the textarea placeholder, URL helper text, analyze button label, and loading messages to match the selected context.
 
 ## 🏗️ Architecture
 
 ```
 ├── backend/
-│   ├── app.py                  # FastAPI main application
-│   ├── fake_news.py            # Hybrid ML + Heuristic analyzer
-│   ├── web_verifier.py         # Real-time web search verification (DuckDuckGo)
-│   ├── nlp_analyzer.py         # Advanced NLP features (spaCy + NLTK)
-│   ├── originality.py          # Originality analysis module
-│   ├── cyber_threat.py         # Cyber threat intelligence module
-│   ├── requirements.txt        # Python dependencies (includes transformers, torch)
-│   └── fake_news_model.pkl     # Trained ML model (auto-generated)
+│   ├── app.py                  # FastAPI main application (enforces comprehensive logic)
+│   ├── fake_news.py            # Orchestrator for ML, Fact Check, and Web Verifier
+│   ├── fact_checker.py         # Google Fact Check API integration
+│   ├── web_verifier.py         # Real-time search verification (DuckDuckGo)
+│   ├── cyber_threat.py         # Threat intelligence & URLhaus checker
+│   ├── originality.py          # Originality & linguistic metrics
+│   ├── requirements.txt        # Full dependency list
+│   └── .env                    # Environment variables (GOOGLE_FACT_CHECK_KEY)
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx             # Main React component
-│   │   ├── App.css             # Styling
+│   │   ├── App.jsx             # Main React component (dual-mode UI)
+│   │   ├── App.css             # Styling (includes mode-selector & per-mode themes)
 │   │   └── main.jsx            # Entry point
 │   ├── package.json            # Node dependencies
 │   └── vite.config.js          # Vite configuration
@@ -39,12 +52,19 @@ A production-ready web application that analyzes text content using **Machine Le
 
 ## 📋 Prerequisites
 
+### API Access
+1. **Google Fact Check API**: Obtain a free API key from the [Google Cloud Console](https://console.cloud.google.com/).
+2. **Environment Configuration**: Create a `.env` file in the `backend/` directory:
+   ```env
+   GOOGLE_FACT_CHECK_KEY=your_api_key_here
+   ```
+
 ### System Requirements
 - **Python**: 3.8 or higher
 - **Node.js**: 16.x or higher
 - **npm**: 8.x or higher
-- **RAM**: 2GB minimum (4GB recommended for NLP models)
-- **Storage**: 500MB for dependencies
+- **RAM**: 4GB recommended (for loading RoBERTa + NLP models)
+- **Storage**: 1GB for dependencies + ML models
 
 ### Operating Systems
 - ✅ Windows 10/11
@@ -70,8 +90,6 @@ cd backend
 python -m venv venv
 venv\Scripts\activate
 ```
-
-
 
 #### 2.2 Install Python Dependencies
 
@@ -103,13 +121,13 @@ python -c "import nltk; nltk.download('vader_lexicon'); nltk.download('punkt'); 
 
 **Note:** The system uses a pre-trained **RoBERTa** model by default. On the first run, it will download approximately 500MB of model data. If the model cannot be loaded, the system will automatically fall back to heuristics-only mode.
 
-#### 2.5 Dynamic Verification (Optional)
+#### 2.4 Dynamic Verification (Optional)
 To enable web search verification, ensure the `ddgs` package is installed:
 ```bash
 pip install duckduckgo-search
 ```
 
-#### 2.4 Start Backend Server
+#### 2.5 Start Backend Server
 
 ```bash
 python app.py
@@ -128,10 +146,10 @@ npm run dev
 ### Step 4: Verify Installation
 
 1. Open browser: `http://localhost:3000`
-2. Enter test text: "Scientists confirm quantum communication via hand-clapping"
-3. Click "Analyze Content"
-4. Should see results with percentage scores
-
+2. Select a mode using the **tab strip** at the top of the page
+3. Enter test text (e.g. `"Scientists confirm quantum communication via hand-clapping"`)
+4. Click the **Analyze** button for the chosen mode
+5. Review the percentage-based results relevant to that mode
 
 ### Health Check
 
@@ -139,61 +157,51 @@ npm run dev
 curl http://localhost:8000/health
 ```
 
-
 ## 📊 Scoring Methodology
 
-### Fake News Detection (ML + NLP + Heuristics)
+### Full Modular Enforcement (Verified Comprehensive Analysis)
+To ensure academic-grade accuracy, the system follows a **Strict Enforcement Policy**:
+- **ML Analysis**: Must return a valid RoBERTa classification score.
+- **Fact Checker**: Must successfully query the Google Fact Check database.
+- **Web Verifier**: Must complete claim verification via search engines.
 
-**Hybrid Model: ML (50%) + Heuristics (30%) + NLP (20%)**
+**If any of these modules fail, the system returns a `503 Service Unavailable` error instead of a partial result, ensuring the user always receives a complete and verified report.**
 
-#### Machine Learning Component (50%)
-- **Model**: RoBERTa Transformer (`hamzab/roberta-fake-news-classification`)
-- **Nature**: Deep Learning-based sequence classification
-- **Confidence**: Returns 0-100% probability based on model weights
-- **Output**: Calibrated deep learning probability
+### Fake News Detection
+**Final Score = [(ML × 0.50) + (Heuristic × 0.30) + (NLP × 0.20)] + External Adjustments**
 
-#### Heuristic Component (30%)
-Weighted combination of pattern-based indicators:
+| Module | Weight | Function |
+|--------|--------|----------|
+| **ML RoBERTa** | 50% | Deep learning sequence classification |
+| **Google Fact Check** | ±20% | Verdict-based adjustment from global fact-checkers |
+| **Web Search** | ±15% | Real-time cross-referencing against credible news |
+| **Heuristics** | 30% | Pattern-based misinformation indicators |
 
-| Factor | Weight | Description |
-|--------|--------|-------------|
-| Strong Fake Indicators | 35% | Conspiracy language, misinformation patterns |
-| Absurdity/Satire | 40% | Pseudo-science, impossible claims, humor markers |
-| Clickbait | 15% | Sensational headlines, emotional manipulation |
-| Credibility Reduction | Variable | Trusted sources, journalistic standards |
-
-#### NLP Component (20%)
-Advanced linguistic analysis using spaCy + NLTK:
-
-| Feature | Purpose | Impact |
-|---------|---------|--------|
-| Named Entity Recognition | Detects real persons, orgs, locations | +15-20% credibility |
-| Sentiment Analysis (VADER) | Identifies emotional bias | +8-15% fake if extreme |
-| POS Tagging | Detects excessive adjectives/adverbs | +10% fake if excessive |
-| Linguistic Complexity | Flesch score, vocabulary richness | +10% credibility if high |
-
-#### Web Verification Adjustment (Dynamic)
-If the initial analysis is uncertain (score between 30% and 80%), the system triggers a real-time web search:
-- **Credible Source Match**: -15% to -30% fake probability
-- **Fact-Checker Debunk**: +40% fake probability
-- **No Results Found**: +10% fake probability
+#### External Adjustment Logic
+The system triggers real-time verification for all analyses:
+- **Fact-Checker Debunk (FALSE)**: +20% to +40% fake probability
+- **Fact-Checker Verified (TRUE)**: -20% to -40% fake probability
+- **Credible Web Source Match**: -15% to -30% fake probability
+- **No Credible Sources Found**: +10% fake probability
 - **Non-Credible Source Only**: +20% fake probability
-
-**Formula:**
-```
-Final Score = [(ML × 0.50) + (Heuristic × 0.30) + (NLP × 0.20)] + Web_Adjustment
-```
 
 **Thresholds:**
 - High absurdity (>70%) → Minimum 80% fake
 - High credibility (>80%) + Low fake indicators → Maximum 25% fake
 
+### Cyber Threat Detection
+Analyzes patterns indicative of phishing, social engineering, and malware delivery:
+- URL inspection for suspicious TLDs, redirects, and IP-literal hosts
+- Known malware domain cross-reference via URLhaus
+- Social engineering phrase detection (urgency, credential harvesting)
+- Threat level classification: **Low → Medium → High → Critical**
+
 ## 🎓 Academic Justification
 
 ### Performance & Consistency
 1. **Result Caching**: The system uses MD5 hashing to cache analysis results. If the same content is analyzed twice, it returns the previous verdict instantly, ensuring 100% deterministic output.
-2. **Multi-Stage Reporting**: The UI breaks down the analysis into stages (ML scanning, Originality check, etc.) so the user is always informed of the current process.
-3. **Graceful Failures**: If an engine times out or fails, the analysis "cuts off" cleanly and provides a detailed "Why it failed" explanation card to prevent incomplete data display.
+2. **Multi-Stage Reporting**: The UI breaks down the analysis into mode-specific stages so the user is always informed of the current process.
+3. **Graceful Failures**: If an engine times out or fails, the analysis cuts off cleanly and provides a detailed "Why it failed" error card to prevent incomplete data display.
 
 **Comparable to**: Human fact-checkers, commercial systems (Facebook, Twitter)
 
@@ -202,12 +210,13 @@ Final Score = [(ML × 0.50) + (Heuristic × 0.30) + (NLP × 0.20)] + Web_Adjustm
 ✅ Detect obvious fake news (90%+ accuracy)  
 ✅ Identify satire and parody (95%+ accuracy)  
 ✅ Recognize legitimate journalism (85%+ accuracy)  
+✅ Detect phishing and social engineering patterns  
 ✅ Handle multiple languages (with model updates)  
-✅ Provide explainable results  
+✅ Provide explainable, mode-specific results  
 
 ### What the System Cannot Do
 
-❌ Verify factual accuracy (requires external fact-checking databases)  
+❌ Verify factual accuracy without external fact-checking databases  
 ❌ Detect sophisticated deepfakes (requires multimedia analysis)  
 ❌ Understand context-dependent sarcasm (requires world knowledge)  
 ❌ Guarantee 100% accuracy (no AI system can)  
@@ -218,7 +227,7 @@ Final Score = [(ML × 0.50) + (Heuristic × 0.30) + (NLP × 0.20)] + Web_Adjustm
 
 ### POST /analyze
 
-Analyze text content for fake news and cyber threats.
+Analyze text content for fake news and/or cyber threats. Both modes use the same endpoint; the UI filters which results to display based on the selected mode.
 
 **Request:**
 ```json
@@ -231,31 +240,28 @@ Analyze text content for fake news and cyber threats.
 **Response:**
 ```json
 {
-  "fake_news_probability": 71.2,
-  "authenticity_score": 28.8,
-  "originality_score": 45.3,
-  "cyber_threat_risk": 64.0,
-  "threat_level": "High",
+  "fake_news_probability": 12.5,
+  "authenticity_score": 87.5,
+  "originality_score": 92.0,
+  "cyber_threat_risk": 5.0,
+  "threat_level": "Low",
   "analysis_details": {
+    "is_comprehensive": true,
+    "cached": false,
     "fake_news_factors": {
-      "ml_probability": 75.0,
-      "heuristic_score": 30.0,
-      "nlp_adjustment": 20.0,
-      "model_used": "hybrid",
-      "web_verification": "Verified by 3 credible news sources",
-      "credible_sources_found": 3,
-      "explanation": "AI model: High fake probability; Absurd/implausible claims; Web search confirmed claims",
-      "strong_fake_indicators": 0,
-      "absurdity_score": 80.0,
-      "clickbait_score": 15.0,
-      "credibility_indicators": 20.0,
-      "satire_detected": false
+      "fact_check_verdict": "TRUE",
+      "fact_check_confidence": 95,
+      "web_verification": "Verified by 4 credible sources",
+      "ml_probability": 10.2
     },
-    "originality_factors": {...},
-    "cyber_threat_factors": {...}
+    "originality_factors": { "..." : "..." },
+    "cyber_threat_factors": { "..." : "..." }
   }
 }
 ```
+
+### Error Handling
+- **503 Service Unavailable**: Returned if the system cannot complete a "Full Comprehensive Analysis" due to API key issues, timeouts, or module unavailability.
 
 ### GET /health
 
@@ -273,7 +279,6 @@ Health check endpoint for all services.
 }
 ```
 
-
 ## 🔒 Security Considerations
 
 - ✅ Input sanitization on all endpoints
@@ -283,10 +288,14 @@ Health check endpoint for all services.
 - ✅ Rate limiting ready (can be enabled)
 - ✅ Error handling prevents information leakage
 
+## 🗺️ Roadmap
+
 - [x] Deep learning models (BERT, RoBERTa) for improved accuracy
 - [x] MD5 Deterministic Caching for consistent results
+- [x] Dual-mode interface (Fake News & Cyber Threat tabs)
 - [x] Premium "Bank-Style" success animations
 - [x] Detailed "Why It Failed" error reporting
+- [x] Mode-specific loading steps and button themes
 - [ ] External fact-checking API integration (Snopes, PolitiFact)
 - [ ] Multi-language support (Spanish, French, Arabic)
 - [ ] Real-time social media monitoring
@@ -340,6 +349,9 @@ npm install
 **Problem**: Frontend can't connect to backend  
 **Solution**: Check `vite.config.js` proxy settings match backend port
 
+**Problem**: Switching modes doesn't clear old results  
+**Solution**: This is expected behaviour — results clear automatically when switching tabs. If results persist unexpectedly, click **Clear** before switching modes.
+
 ### NLP Model Issues
 
 **Problem**: "spaCy model not found" warning  
@@ -353,4 +365,3 @@ python -m spacy download en_core_web_sm
 - Reduce text length (system auto-truncates to 15,000 chars)
 - Disable NLP models if not needed
 - Increase server resources
-

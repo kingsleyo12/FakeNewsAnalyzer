@@ -1,4 +1,4 @@
-﻿"""
+"""
 Advanced NLP Analyzer - Enhanced Robustness
 ===========================================
 Uses multiple NLP techniques for comprehensive text analysis:

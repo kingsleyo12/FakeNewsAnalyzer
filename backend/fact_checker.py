@@ -21,7 +21,6 @@ class FactChecker:
         # Known false claims database (backup)
         self.known_false_claims = [
             'hand clapping cures cancer',
-            'hand-clapping cures cancer',
             'clapping hands cures cancer',
             '5g causes covid',
             '5g towers cause covid',
@@ -33,7 +32,11 @@ class FactChecker:
             'moon landing was faked',
             'chemtrails control',
             'drinking bleach cures',
-            'covid is a hoax'
+            'covid is a hoax',
+            'covid-19 is a hoax',
+            'stolen election',
+            'election was rigged',
+            'water is turning frogs gay'
         ]
     
     def check_claims(self, text: str) -> Dict:
@@ -72,6 +75,8 @@ class FactChecker:
         fact_check_results = []
         for claim in claims[:3]:  # Check top 3 claims
             try:
+                # Log for debugging - helps see what the API is actually searching
+                print(f"[*] Querying API for: {claim}")
                 results = self._query_google_factcheck(claim)
                 if results:
                     fact_check_results.extend(results)
@@ -105,22 +110,48 @@ class FactChecker:
             
             sentence_lower = sentence.lower()
             if any(indicator in sentence_lower for indicator in claim_indicators):
-                # Clean and add claim
-                clean_claim = sentence[:200]  # Limit length
-                claims.append(clean_claim)
+                # Clean and add claim - keep it short!
+                clean_claim = self._clean_claim(sentence)
+                if clean_claim:
+                    claims.append(clean_claim)
         
         # If no claims with indicators, use first meaningful sentences
         if not claims and sentences:
             for sentence in sentences[:3]:
-                if len(sentence.strip()) > 30:
-                    claims.append(sentence.strip()[:200])
+                clean = self._clean_claim(sentence)
+                if clean:
+                    claims.append(clean)
         
-        return claims
+        # Deduplicate
+        unique_claims = list(dict.fromkeys(claims))
+        return unique_claims[:3]
+
+    def _clean_claim(self, claim: str) -> str:
+        """Clean and shorten claim for better API matching"""
+        # Remove common fluff
+        fluff = ['BREAKING:', 'SHOCKING:', 'JUST IN:', 'READ MORE:', 'WATCH:']
+        for f in fluff:
+            claim = claim.replace(f, '')
+            
+        # Remove extra whitespace
+        claim = ' '.join(claim.split())
+        
+        # Limit to core content (about 10-15 words)
+        words = claim.split()
+        if len(words) > 15:
+            # Try to keep the most important part (often the middle for claims)
+            # but for news usually the start is lead
+            return ' '.join(words[:15])
+        
+        return claim if len(words) >= 4 else None
     
     def _check_known_false(self, text_lower: str) -> Optional[str]:
-        """Check against database of known false claims"""
+        """Check against database of known false claims (fuzzy-ish)"""
+        # Remove common separators for easier matching
+        clean_text = text_lower.replace('-', ' ').replace('_', ' ')
         for false_claim in self.known_false_claims:
-            if false_claim in text_lower:
+            clean_false = false_claim.replace('-', ' ')
+            if clean_false in clean_text:
                 return false_claim
         return None
     
@@ -286,7 +317,7 @@ if __name__ == "__main__":
     API_KEY = input("Enter your Google Fact Check API key: ").strip()
     
     if not API_KEY:
-        print("❌ No API key provided. Please set your API key.")
+        print(" No API key provided. Please set your API key.")
         exit(1)
     
     checker = FactChecker(API_KEY)
@@ -297,7 +328,7 @@ if __name__ == "__main__":
     The government is hiding this information from the public.
     """
     
-    print("\n📰 Test 1: Debunked Claim (Vaccines-Autism)")
+    print("\n Test 1: Debunked Claim (Vaccines-Autism)")
     print("-" * 60)
     result1 = checker.check_claims(test1)
     print(f"Verdict: {result1['verdict']}")
@@ -311,7 +342,7 @@ if __name__ == "__main__":
     There was widespread voter fraud that changed the outcome.
     """
     
-    print("\n📰 Test 2: Political Claim")
+    print("\n Test 2: Political Claim")
     print("-" * 60)
     result2 = checker.check_claims(test2)
     print(f"Verdict: {result2['verdict']}")
@@ -325,7 +356,7 @@ if __name__ == "__main__":
     Scientists have documented this trend over decades.
     """
     
-    print("\n📰 Test 3: Scientific Claim")
+    print("\n Test 3: Scientific Claim")
     print("-" * 60)
     result3 = checker.check_claims(test3)
     print(f"Verdict: {result3['verdict']}")
@@ -334,5 +365,5 @@ if __name__ == "__main__":
     print(f"Explanation: {result3['explanation']}")
     
     print("\n" + "="*60)
-    print("✅ Tests Complete!")
+    print(" Tests Complete!")
     print("="*60)

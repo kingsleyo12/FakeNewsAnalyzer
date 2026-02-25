@@ -77,11 +77,8 @@ async def analyze_content(request: AnalysisRequest):
     """
     Main analysis endpoint that combines all three analysis modules.
     
-    Returns percentage-based confidence scores for:
-    - Fake news probability
-    - Authenticity score
-    - Originality score
-    - Cyber threat risk
+    Enforces full comprehensive analysis (ML + Fact Check + Web Verify)
+    as per academic requirements.
     """
     try:
         # Validate input
@@ -95,10 +92,13 @@ async def analyze_content(request: AnalysisRequest):
         cache_content = f"{text_raw}|{url_raw}"
         content_hash = hashlib.md5(cache_content.encode()).hexdigest()
         
-        # Check cache
+        # Check cache - ONLY returns if it was a full successful analysis
         if content_hash in analysis_cache:
             logger.info(f"Returning cached result for hash: {content_hash}")
-            return analysis_cache[content_hash]
+            cached_result = analysis_cache[content_hash]
+            # Ensure we mark it as cached for the UI
+            cached_result.analysis_details["cached"] = True
+            return cached_result
         
         text = text_raw
         
@@ -114,8 +114,17 @@ async def analyze_content(request: AnalysisRequest):
         originality_result = originality_analyzer.analyze(text)
         cyber_threat_result = cyber_threat_analyzer.analyze(text, url)
         
-        # Calculate authenticity as inverse of fake news probability
-        authenticity_score = 100 - fake_news_result["probability"]
+        # ENFORCEMENT: Only allow results if all modules (ML, Fact Check, Web Verify) succeeded
+        if not fake_news_result.get("is_full_analysis", False):
+            logger.warning(f"Analysis incomplete for hash {content_hash}. Missing one or more modules.")
+            raise HTTPException(
+                status_code=503, 
+                detail="Full comprehensive analysis could not be completed. One or more verification modules (ML, Fact Checker, or Web Verifier) are currently unavailable."
+            )
+
+        # Calculate authenticity as the overall credibility (considering both fake news and threats)
+        max_risk = max(fake_news_result["probability"], cyber_threat_result["risk_score"])
+        authenticity_score = 100 - max_risk
         
         # Determine threat level based on cyber threat risk
         threat_level = get_threat_level(cyber_threat_result["risk_score"])
@@ -130,11 +139,12 @@ async def analyze_content(request: AnalysisRequest):
                 "fake_news_factors": fake_news_result["factors"],
                 "originality_factors": originality_result["factors"],
                 "cyber_threat_factors": cyber_threat_result["factors"],
-                "cached": False
+                "cached": False,
+                "is_comprehensive": True
             }
         )
         
-        # Store in cache
+        # Store in cache ONLY if it reached this point (which means it's full/comprehensive)
         analysis_cache[content_hash] = result
         return result
     

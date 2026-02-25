@@ -8,11 +8,17 @@ try:
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
-    print("⚠️  transformers library not installed - running in heuristics-only mode")
+    print("  transformers library not installed - running in heuristics-only mode")
 
 import os
 from dotenv import load_dotenv
 load_dotenv()
+
+# Disable problematic background threads and network checks in transformers
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_AUTO_CONVERSION"] = "1"
+
 import re
 from typing import Dict, Optional
 import warnings
@@ -23,14 +29,14 @@ try:
     WEB_SEARCH_AVAILABLE = True
 except ImportError:
     WEB_SEARCH_AVAILABLE = False
-    print("⚠️  Web search not available")
+    print("Warning: Web search not available")
 
 class HybridFakeNewsAnalyzer:
     def __init__(self):
         """
         Initialize the hybrid analyzer with pre-trained model and heuristics
         """
-        print("🔄 Loading Fake News Analyzer...")
+        print("[*] Loading Fake News Analyzer...")
         
         # Try to load pre-trained model
         self.ml_model = None
@@ -38,24 +44,36 @@ class HybridFakeNewsAnalyzer:
         
         if TRANSFORMERS_AVAILABLE:
             try:
-                print("📦 Loading pre-trained RoBERTa model (first time may take 2-3 minutes)...")
-                self.ml_model = pipeline(
-                    "text-classification",
-                    model="hamzab/roberta-fake-news-classification",
-                    device=-1  # Use CPU (-1), or 0 for GPU
-                )
+                print(" Loading RoBERTa model (using local cache if available)...")
+                # Try local loading first to avoid the Thread-auto_conversion crash
+                try:
+                    self.ml_model = pipeline(
+                        "text-classification",
+                        model="hamzab/roberta-fake-news-classification",
+                        device=-1,
+                        local_files_only=True
+                    )
+                except Exception:
+                    # If not in cache, let it download (standard behavior)
+                    print("  Model not found in local cache, attempting download...")
+                    self.ml_model = pipeline(
+                        "text-classification",
+                        model="hamzab/roberta-fake-news-classification",
+                        device=-1
+                    )
+                
                 self.ml_available = True
-                print("✅ Pre-trained model loaded successfully!")
+                print(" Pre-trained model loaded successfully!")
             except Exception as e:
-                print(f"⚠️  Pre-trained model not available: {e}")
-                print("📝 Falling back to heuristics-only mode")
+                print(f"  Pre-trained model loading failed: {e}")
+                print(" Falling back to heuristics-only mode")
         else:
-            print("📝 Running in heuristics-only mode (install transformers for ML features)")
+            print(" Running in heuristics-only mode (install transformers for ML features)")
         
         # Heuristic patterns
         self._initialize_patterns()
         
-        print("✅ Fake News Analyzer ready!")
+        print(" Fake News Analyzer ready!")
     
     def _initialize_patterns(self):
         """Initialize all pattern matching rules"""
@@ -89,7 +107,7 @@ class HybridFakeNewsAnalyzer:
         self.clickbait_patterns = [
             'you won\'t believe', 'what happens next', 'will shock you',
             'doctors hate him', 'this one trick', 'number 7 will',
-            'must see', 'going viral', 'breaking', 'urgent',
+            'must see', 'going viral', 'breaking',
             'everyone is talking about', 'you need to see'
         ]
         
@@ -447,7 +465,7 @@ class FakeNewsAnalyzer:
         if WEB_SEARCH_AVAILABLE:
             self.web_verifier = WebSearchVerifier()
             self.use_web_search = True
-            print("✅ Web search verification enabled")
+            print(" Web search verification enabled")
         else:
             self.web_verifier = None
             self.use_web_search = False
@@ -458,30 +476,36 @@ class FakeNewsAnalyzer:
             api_key = os.environ.get('GOOGLE_FACT_CHECK_KEY')
             if api_key:
                 self.fact_checker = FactChecker(api_key)
-                print("✅ Google Fact Check API enabled")
+                print(" Google Fact Check API enabled")
             else:
                 self.fact_checker = None
-                print("⚠️  No API key found in .env")
+                print("  No API key found in .env")
         except ImportError as e:
             self.fact_checker = None
-            print(f"⚠️  Fact checker module not found: {e}")
+            print(f"  Fact checker module not found: {e}")
         except Exception as e:
             self.fact_checker = None
-            print(f"⚠️  Fact checker error: {e}")
+            print(f"  Fact checker error: {e}")
 
     def analyze(self, text: str):
         result = self.analyzer.analyze(text)
         base_score = result['fake_news_probability']
+        
+        # Track which components succeeded
+        ml_success = result['components']['ml_probability'] is not None
+        web_success = False
+        fact_check_success = False
 
-        # Web search layer
+        # Web search layer - Ensure it runs for ALL scores to meet "full analysis" requirement
         web_search_result = None
-        if self.use_web_search and 30 < base_score < 80:
+        if self.use_web_search:
             try:
                 web_search_result = self.web_verifier.verify_claims(text, max_searches=2)
                 base_score += web_search_result['score_adjustment']
                 base_score = max(0, min(base_score, 100))
+                web_success = True
             except Exception as e:
-                print(f"⚠️ Web search error: {e}")
+                print(f" Web search error: {e}")
 
         # Fact check layer
         fact_check_result = None
@@ -492,12 +516,17 @@ class FakeNewsAnalyzer:
                     base_score = min(base_score + 20, 100)
                 elif fact_check_result['verdict'] == 'TRUE':
                     base_score = max(base_score - 20, 0)
-                print(f"✅ Fact check: {fact_check_result['verdict']} ({fact_check_result['confidence']}% confidence)")
+                print(f" Fact check: {fact_check_result['verdict']} ({fact_check_result['confidence']}% confidence)")
+                fact_check_success = True
             except Exception as e:
-                print(f"⚠️ Fact check error: {e}")
+                print(f" Fact check error: {e}")
+
+        # Check if all modules gave results
+        is_full = ml_success and web_success and fact_check_success
 
         return {
             "probability": round(base_score, 1),
+            "is_full_analysis": is_full,
             "factors": {
                 "ml_probability": result['components']['ml_probability'],
                 "heuristic_score": result['components']['heuristic_score'],
@@ -513,7 +542,8 @@ class FakeNewsAnalyzer:
                 "absurdity_score": result['factors']['absurdity_score'],
                 "clickbait_score": result['factors']['clickbait_score'],
                 "credibility_indicators": result['factors']['credibility_indicators'],
-                "satire_detected": result['factors']['satire_detected']
+                "satire_detected": result['factors']['satire_detected'],
+                "full_analysis_completed": is_full
             }
         }
 
@@ -533,7 +563,7 @@ if __name__ == "__main__":
     hide this miracle cure. Share before they delete this!
     """
     
-    print("\n📰 Test 1: Obvious Fake News")
+    print("\n Test 1: Obvious Fake News")
     print("-" * 60)
     result1 = analyzer.analyze(test1)
     print(f"Fake Probability: {result1['fake_news_probability']}%")
@@ -548,7 +578,7 @@ if __name__ == "__main__":
     from multiple sources and was confirmed by independent experts.
     """
     
-    print("\n📰 Test 2: Legitimate News")
+    print("\n Test 2: Legitimate News")
     print("-" * 60)
     result2 = analyzer.analyze(test2)
     print(f"Fake Probability: {result2['fake_news_probability']}%")
@@ -562,7 +592,7 @@ if __name__ == "__main__":
     seeing him disappear in a flash of light. Scientists allegedly baffled.
     """
     
-    print("\n📰 Test 3: Satire/Humor")
+    print("\n Test 3: Satire/Humor")
     print("-" * 60)
     result3 = analyzer.analyze(test3)
     print(f"Fake Probability: {result3['fake_news_probability']}%")
@@ -570,5 +600,5 @@ if __name__ == "__main__":
     print(f"Explanation: {result3['explanation']}")
     
     print("\n" + "="*60)
-    print("✅ Tests Complete!")
+    print(" Tests Complete!")
     print("="*60)

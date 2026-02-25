@@ -1,22 +1,27 @@
+# Core API
 fastapi==0.95.2
 uvicorn==0.24.0
 pydantic==1.10.13
-nltk==3.8.1
-spacy==3.7.2
-numpy==1.26.2
-pandas==2.1.3
-joblib==1.3.2
 requests==2.31.0
 python-multipart==0.0.6
-aiohttp==3.9.1
-validators==0.22.0
-scikit-learn==1.3.2
 python-dotenv==1.0.0
 
-# Machine Learning - Pre-trained Models
+# Machine Learning - MUST BE INSTALLED for Full Comprehensive Analysis
 transformers==4.36.0
 torch==2.1.0
 sentencepiece==0.1.99
 
-# Web Verification logic
+# NLP and Linguistic Analysis
+nltk==3.8.1
+spacy==3.7.2
+numpy==1.26.2
+
+# External Verification Logic
 duckduckgo-search==4.2
+validators==0.22.0
+
+# Legacy/Supplementary (Keep for model compatibility if needed)
+scikit-learn==1.3.2
+pandas==2.1.3
+joblib==1.3.2
+aiohttp==3.9.1
