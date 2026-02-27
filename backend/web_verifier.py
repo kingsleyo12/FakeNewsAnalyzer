@@ -1,7 +1,15 @@
 """
 Web Search Verifier
 Verifies news claims by searching credible sources online
+Priority:  1) Serper.dev  (SERPER_API_KEY  — 2,500 free, no credit card)
+           2) Brave Search (BRAVE_SEARCH_KEY — paid plans only)
+           3) DuckDuckGo   (no key needed,  may be rate-limited)
 """
+
+import os
+import requests as _requests
+from dotenv import load_dotenv
+load_dotenv()
 
 try:
     from ddgs import DDGS
@@ -9,7 +17,6 @@ except ImportError:
     try:
         from duckduckgo_search import DDGS
     except ImportError:
-        # Define a dummy DDGS if both fail
         class DDGS:
             def __enter__(self): return self
             def __exit__(self, *args): pass
@@ -17,30 +24,48 @@ except ImportError:
 import re
 from typing import Dict, List, Optional
 import time
+import random
 
 class WebSearchVerifier:
+    # Global DDG cooldown — shared across all instances to avoid rate-limits
+    _last_ddg_call: float = 0.0
+    _DDG_MIN_INTERVAL: float = 8.0  # seconds between DDG requests
+
     def __init__(self):
         """Initialize the web search verifier"""
-        
+
+        # --- Provider selection (checked in priority order) ---
+        self.serper_api_key = os.environ.get('SERPER_API_KEY', '')
+        self.brave_api_key  = os.environ.get('BRAVE_SEARCH_KEY', '')
+
+        if self.serper_api_key:
+            print(" Serper.dev API key found — using Serper as primary search provider.")
+        elif self.brave_api_key:
+            print(" Brave Search API key found — using Brave as primary search provider.")
+        else:
+            print("  No search API key found — falling back to DuckDuckGo (may be rate-limited).")
+            print("  Tip: Sign up free at https://serper.dev — 2,500 free queries, no credit card.")
+            print("       Then add SERPER_API_KEY=<key> to your .env file.")
+
         # Trusted news sources (high credibility)
         self.trusted_sources = [
-            'reuters.com', 'bbc.com', 'bbc.co.uk', 'apnews.com', 
+            'reuters.com', 'bbc.com', 'bbc.co.uk', 'apnews.com',
             'npr.org', 'pbs.org', 'nytimes.com', 'washingtonpost.com',
             'theguardian.com', 'wsj.com', 'economist.com', 'time.com',
             'cnn.com', 'nbcnews.com', 'cbsnews.com', 'abcnews.go.com',
             'usatoday.com', 'latimes.com', 'politico.com', 'thehill.com'
         ]
-        
+
         # Fact-checking sources (highest credibility)
         self.fact_check_sources = [
-            'snopes.com', 'factcheck.org', 'politifact.com', 
+            'snopes.com', 'factcheck.org', 'politifact.com',
             'fullfact.org', 'factcheck.afp.com', 'apnews.com/APFactCheck',
             'reuters.com/fact-check', 'usatoday.com/fact-check'
         ]
-        
+
         # Low credibility indicators (suspicious domains)
         self.suspicious_tlds = [
-            '.tk', '.ml', '.ga', '.cf', '.gq', '.xyz', '.top', 
+            '.tk', '.ml', '.ga', '.cf', '.gq', '.xyz', '.top',
             '.work', '.click', '.link', '.loan', '.bid', '.win'
         ]
     
@@ -175,26 +200,117 @@ class WebSearchVerifier:
         
         return clean if len(clean) > 10 else ''
     
-    def _search_claim(self, claim: str) -> List[Dict]:
+    def _search_claim(self, claim: str, retries: int = 3) -> List[Dict]:
         """
-        Search DuckDuckGo for a claim
-        Returns list of search results
+        Search for a claim using the best available provider:
+          1. Serper.dev  (SERPER_API_KEY)  — 2,500 free, no rate limits
+          2. Brave Search (BRAVE_SEARCH_KEY) — paid
+          3. DuckDuckGo  (no key)           — free but rate-limited
         """
+        if self.serper_api_key:
+            return self._search_serper(claim)
+        if self.brave_api_key:
+            return self._search_brave(claim)
+        return self._search_duckduckgo(claim, retries)
+
+    def _search_serper(self, claim: str) -> List[Dict]:
+        """Search using Serper.dev — Google SERP results, 2,500 free queries."""
         try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(claim, max_results=5))
-                
+            resp = _requests.post(
+                'https://google.serper.dev/search',
+                headers={
+                    'X-API-KEY': self.serper_api_key,
+                    'Content-Type': 'application/json'
+                },
+                json={'q': claim, 'num': 5},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get('organic', [])
                 return [
                     {
                         'title': r.get('title', ''),
-                        'url': r.get('href', ''),
-                        'snippet': r.get('body', '')
+                        'url': r.get('link', ''),
+                        'snippet': r.get('snippet', '')
                     }
                     for r in results
                 ]
+            else:
+                print(f"Serper search error: HTTP {resp.status_code}")
+                return []
         except Exception as e:
-            print(f"DuckDuckGo search error: {e}")
+            print(f"Serper search error: {e}")
             return []
+
+    def _search_brave(self, claim: str) -> List[Dict]:
+        """Search using Brave Search API (no rate-limit issues)"""
+        try:
+            resp = _requests.get(
+                'https://api.search.brave.com/res/v1/web/search',
+                headers={
+                    'Accept': 'application/json',
+                    'Accept-Encoding': 'gzip',
+                    'X-Subscription-Token': self.brave_api_key
+                },
+                params={'q': claim, 'count': 5, 'search_lang': 'en'},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get('web', {}).get('results', [])
+                return [
+                    {
+                        'title': r.get('title', ''),
+                        'url': r.get('url', ''),
+                        'snippet': r.get('description', '')
+                    }
+                    for r in results
+                ]
+            else:
+                print(f"Brave Search error: HTTP {resp.status_code}")
+                return []
+        except Exception as e:
+            print(f"Brave Search error: {e}")
+            return []
+
+    def _search_duckduckgo(self, claim: str, retries: int = 3) -> List[Dict]:
+        """Fallback: DuckDuckGo with global cooldown + exponential-backoff retry."""
+        # Enforce a global minimum interval between DDG calls
+        elapsed = time.time() - WebSearchVerifier._last_ddg_call
+        if elapsed < WebSearchVerifier._DDG_MIN_INTERVAL:
+            wait = WebSearchVerifier._DDG_MIN_INTERVAL - elapsed
+            print(f"DDG cooldown: waiting {wait:.1f}s to avoid rate-limit...")
+            time.sleep(wait)
+
+        for attempt in range(retries):
+            try:
+                with DDGS() as ddgs:
+                    results = list(ddgs.text(claim, max_results=5))
+                    WebSearchVerifier._last_ddg_call = time.time()
+                    return [
+                        {
+                            'title': r.get('title', ''),
+                            'url': r.get('href', ''),
+                            'snippet': r.get('body', '')
+                        }
+                        for r in results
+                    ]
+            except Exception as e:
+                error_str = str(e).lower()
+                if 'ratelimit' in error_str:
+                    if attempt < retries - 1:
+                        wait = (2 ** attempt) + random.uniform(1, 3)
+                        print(f"DuckDuckGo rate-limited. Retrying in {wait:.1f}s (attempt {attempt + 1}/{retries})...")
+                        time.sleep(wait)
+                    else:
+                        print(f"DuckDuckGo rate-limit persists after {retries} attempts — skipping web search.")
+                        WebSearchVerifier._last_ddg_call = time.time()
+                        return []
+                else:
+                    print(f"DuckDuckGo search error: {e}")
+                    return []
+        return []
     
     def _is_credible_source(self, url: str) -> bool:
         """Check if URL is from a credible news source"""

@@ -115,13 +115,9 @@ async def analyze_content(request: AnalysisRequest):
         originality_result = originality_analyzer.analyze(text)
         cyber_threat_result = cyber_threat_analyzer.analyze(text, url)
         
-        # ENFORCEMENT: Only allow results if all modules (ML, Fact Check, Web Verify) succeeded
+        # Log if any modules were unavailable (degraded mode — still return results)
         if not fake_news_result.get("is_full_analysis", False):
-            logger.warning(f"Analysis incomplete for hash {content_hash}. Missing one or more modules.")
-            raise HTTPException(
-                status_code=503, 
-                detail="Full comprehensive analysis could not be completed. One or more verification modules (ML, Fact Checker, or Web Verifier) are currently unavailable."
-            )
+            logger.warning(f"Analysis running in degraded mode for hash {content_hash}. One or more optional modules unavailable.")
 
         # News authenticity: how credible the content is from a fake-news perspective
         news_authenticity_score = round(100 - fake_news_result["probability"], 1)
@@ -143,7 +139,8 @@ async def analyze_content(request: AnalysisRequest):
                 "originality_factors": originality_result["factors"],
                 "cyber_threat_factors": cyber_threat_result["factors"],
                 "cached": False,
-                "is_comprehensive": True
+                "is_comprehensive": fake_news_result.get("is_full_analysis", False),
+                "analysis_mode": "full" if fake_news_result.get("is_full_analysis", False) else "partial"
             }
         )
         

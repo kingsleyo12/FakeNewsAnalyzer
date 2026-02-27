@@ -85,12 +85,21 @@ def run_all_tests():
     
     # Web Search
     try:
-        from duckduckgo_search import DDGS
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS
+        import time
+        time.sleep(5)  # Let DDG rate-limit cool down after test cases
         with DDGS() as ddgs:
             list(ddgs.text("test", max_results=1))
             print("Web Search Verifier: ONLINE")
-    except:
-        print("Web Search Verifier: OFFLINE")
+    except Exception as e:
+        err = str(e).lower()
+        if "ratelimit" in err:
+            print("Web Search Verifier: RATE-LIMITED (module works, but temporarily throttled by DuckDuckGo)")
+        else:
+            print(f"Web Search Verifier: OFFLINE ({e})")
 
     print("\n" + "="*80)
     print("TEST SUITE COMPLETE")

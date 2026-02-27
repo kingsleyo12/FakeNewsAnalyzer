@@ -90,60 +90,75 @@ class FactChecker:
     
     def _extract_claims(self, text: str) -> List[str]:
         """Extract potential factual claims from text"""
-        # Split into sentences
-        sentences = re.split(r'[.!?]+', text)
-        
+        # Split on sentence boundaries — but NOT on decimal points like 5.25 or 3.14
+        # Negative lookbehind: don't split when period is preceded by a digit
+        # Negative lookahead:  don't split when period is followed by a digit
+        sentences = re.split(r'(?<![\d])([.!?]+)(?![\d])', text)
+        # re.split with a capturing group interleaves delimiters; filter them out
+        sentences = [s.strip() for s in sentences if s and not re.fullmatch(r'[.!?]+', s.strip())]
+
         claims = []
         for sentence in sentences[:10]:  # Check first 10 sentences
             sentence = sentence.strip()
-            
+
             # Skip very short sentences
-            if len(sentence) < 30:
+            if len(sentence) < 20:
                 continue
-            
+
             # Look for claim indicators
             claim_indicators = [
                 'according to', 'scientists', 'researchers', 'study shows',
                 'data shows', 'report', 'claims', 'states that', 'confirms',
                 'proves', 'evidence', 'found that', 'discovered', 'announced'
             ]
-            
+
             sentence_lower = sentence.lower()
             if any(indicator in sentence_lower for indicator in claim_indicators):
-                # Clean and add claim - keep it short!
                 clean_claim = self._clean_claim(sentence)
                 if clean_claim:
                     claims.append(clean_claim)
-        
-        # If no claims with indicators, use first meaningful sentences
-        if not claims and sentences:
+
+        # If no indicator-based claims found, fall back to first meaningful sentences
+        if not claims:
             for sentence in sentences[:3]:
                 clean = self._clean_claim(sentence)
                 if clean:
                     claims.append(clean)
-        
+
         # Deduplicate
         unique_claims = list(dict.fromkeys(claims))
         return unique_claims[:3]
 
     def _clean_claim(self, claim: str) -> str:
-        """Clean and shorten claim for better API matching"""
-        # Remove common fluff
-        fluff = ['BREAKING:', 'SHOCKING:', 'JUST IN:', 'READ MORE:', 'WATCH:']
+        """
+        Clean and shorten claim for Google Fact Check API matching.
+        The API works best with SHORT keyword phrases (6-8 words), not
+        long verbatim sentences. Overly specific long queries rarely match.
+        """
+        # Remove common fluff prefixes
+        fluff = ['BREAKING:', 'SHOCKING:', 'JUST IN:', 'READ MORE:', 'WATCH:',
+                 'EXCLUSIVE:', 'URGENT:', 'UPDATE:']
         for f in fluff:
-            claim = claim.replace(f, '')
-            
-        # Remove extra whitespace
+            claim = claim.replace(f, '').replace(f.lower(), '')
+
+        # Remove leading conjunctions / filler that add nothing to the search
+        claim = re.sub(r'^(and|but|so|then|also|however|meanwhile)\s+', '', claim.strip(), flags=re.IGNORECASE)
+
+        # Collapse whitespace
         claim = ' '.join(claim.split())
-        
-        # Limit to core content (about 10-15 words)
+
+        # Strip possessives and punctuation that confuse the API
+        claim = re.sub(r"'s\b", '', claim)
+        claim = re.sub(r'["\']', '', claim)
+
         words = claim.split()
-        if len(words) > 15:
-            # Try to keep the most important part (often the middle for claims)
-            # but for news usually the start is lead
-            return ' '.join(words[:15])
-        
-        return claim if len(words) >= 4 else None
+
+        # Too short to be meaningful
+        if len(words) < 4:
+            return None
+
+        # Keep only first 8 words — short queries match the Fact Check DB far better
+        return ' '.join(words[:8])
     
     def _check_known_false(self, text_lower: str) -> Optional[str]:
         """Check against database of known false claims (fuzzy-ish)"""
