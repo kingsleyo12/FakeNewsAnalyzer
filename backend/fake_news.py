@@ -31,6 +31,13 @@ except ImportError:
     WEB_SEARCH_AVAILABLE = False
     print("Warning: Web search not available")
 
+try:
+    from gemini_analyzer import GeminiAnalyzer
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    print("Warning: Gemini analyzer not available")
+
 class HybridFakeNewsAnalyzer:
     def __init__(self):
         """
@@ -496,6 +503,18 @@ class FakeNewsAnalyzer:
             self.fact_checker = None
             print(f"  Fact checker error: {e}")
 
+        # Gemini Analyzer
+        if GEMINI_AVAILABLE:
+            gemini_key = os.environ.get('GOOGLE_GEMINI_KEY')
+            if gemini_key:
+                self.gemini_analyzer = GeminiAnalyzer(gemini_key)
+                print(" Google Gemini AI enabled")
+            else:
+                self.gemini_analyzer = None
+                print("  No Google Gemini key found in .env")
+        else:
+            self.gemini_analyzer = None
+
     def analyze(self, text: str):
         result = self.analyzer.analyze(text)
         base_score = result['fake_news_probability']
@@ -504,6 +523,7 @@ class FakeNewsAnalyzer:
         ml_success = result['components']['ml_probability'] is not None
         web_success = False
         fact_check_success = False
+        gemini_success = False
 
         # Web search layer - Ensure it runs for ALL scores to meet "full analysis" requirement
         web_search_result = None
@@ -530,8 +550,23 @@ class FakeNewsAnalyzer:
             except Exception as e:
                 print(f" Fact check error: {e}")
 
-        # Check if all modules gave results
-        is_full = ml_success and web_success and fact_check_success
+        # Gemini Reasoning layer
+        gemini_result = None
+        if self.gemini_analyzer:
+            try:
+                gemini_result = self.gemini_analyzer.analyze_text(text)
+                # Weighted impact of Gemini (reasoning-based)
+                # If Gemini says highly likely fake (e.g. 80%), it moves the base score
+                gemini_impact = (gemini_result['probability'] - 50) * 0.4
+                base_score += gemini_impact
+                base_score = max(0, min(base_score, 100))
+                print(f" Gemini AI: {gemini_result['verdict']} ({gemini_result['probability']}% prob)")
+                gemini_success = True
+            except Exception as e:
+                print(f" Gemini error: {e}")
+
+        # Check if all modules gave results (Full comprehensive now includes Gemini)
+        is_full = ml_success and web_success and fact_check_success and gemini_success
 
         return {
             "probability": round(base_score, 1),
@@ -546,6 +581,7 @@ class FakeNewsAnalyzer:
                 "fact_check_verdict": fact_check_result['verdict'] if fact_check_result else None,
                 "fact_check_confidence": fact_check_result['confidence'] if fact_check_result else None,
                 "fact_check_explanation": fact_check_result['explanation'] if fact_check_result else None,
+                "gemini_analysis": gemini_result if gemini_result else None,
                 "explanation": result['explanation'],
                 "strong_fake_indicators": result['factors']['strong_fake_indicators'],
                 "absurdity_score": result['factors']['absurdity_score'],

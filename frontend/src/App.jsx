@@ -461,12 +461,12 @@ function App() {
                     badge={results.threat_level}
                     badgeColor={getThreatColor(results.threat_level)}
                   />
-                  <ScoreCard
+                  {/* <ScoreCard
                     title="🔒 Cyber Safety Score"
                     value={results.cyber_authenticity_score}
                     color={getScoreColor(results.cyber_authenticity_score, true)}
                     ranges={CYBER_AUTH_RANGES}
-                  />
+                  /> */}
                 </div>
 
                 <div className="details-section">
