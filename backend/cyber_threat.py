@@ -6,8 +6,17 @@ social engineering, and malicious content indicators.
 """
 
 import re
+import os
+import json
+import logging
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
+
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
 
 try:
     from urlhaus_checker import URLhausChecker
@@ -15,9 +24,9 @@ try:
 except ImportError:
     URLHAUS_AVAILABLE = False
 
+logger = logging.getLogger(__name__)
 
 class CyberThreatAnalyzer:
-
     def __init__(self):
         self.phishing_keywords = {
             'verify your account', 'confirm your identity', 'update your information',
@@ -86,6 +95,19 @@ class CyberThreatAnalyzer:
         else:
             self.urlhaus = None
 
+        # Groq API for advanced NLP threat reasoning
+        self.groq_client = None
+        if GROQ_AVAILABLE:
+            api_key = os.environ.get('GROQ_API_KEY')
+            if api_key:
+                try:
+                    self.groq_client = Groq(api_key=api_key)
+                    print(" Cyber Threat NLP Engine (Groq Llama-3) connected")
+                except Exception as e:
+                    print(f" Groq initialization error in Cyber Threat module: {e}")
+            else:
+                print(" No GROQ_API_KEY found for Cyber Threat Engine")
+
     def analyze(self, text: str, url: Optional[str] = None) -> Dict:
         text_lower = text.lower()
 
@@ -131,6 +153,24 @@ class CyberThreatAnalyzer:
 
         risk_score = min(100, highest_score + multi_threat_bonus)
 
+        # Let the NLP engine perform a zero-shot contextual analysis for deep social engineering
+        nlp_threat_details = "NLP engine not run"
+        if self.groq_client and len(text.strip()) > 10:
+            try:
+                nlp_result = self._query_nlp_threat_analyzer(text)
+                nlp_threat_score = nlp_result.get('risk_score', 0)
+                nlp_explanation = nlp_result.get('explanation', '')
+                
+                if nlp_threat_score > risk_score:
+                    # If NLP detects something heuristics completely missed, boost it
+                    risk_score = max(risk_score, nlp_threat_score)
+                nlp_threat_details = f"{nlp_explanation} (NLP Confidence: {nlp_threat_score}%)"
+            except Exception as e:
+                print(f"NLP Threat Engine error: {e}")
+                nlp_threat_details = "NLP engine failed during analysis"
+
+        risk_score = round(min(100, risk_score), 1)
+
         return {
             "risk_score": round(risk_score, 1),
             "threat_level": self._get_threat_level(risk_score),
@@ -142,6 +182,7 @@ class CyberThreatAnalyzer:
                 "url_risk_score": round(url_score, 1),
                 "malware_patterns": round(malware_score, 1),
                 "urlhaus_check": urlhaus_details,
+                "ai_threat_analysis": nlp_threat_details,
                 "detected_threats": self._get_detected_threats(
                     phishing_score, social_eng_score, urgency_score,
                     credential_score, url_score, malware_score
@@ -152,6 +193,35 @@ class CyberThreatAnalyzer:
                 )
             }
         }
+
+    def _query_nlp_threat_analyzer(self, text: str) -> Dict:
+        """Uses Llama 3 to perform a deep contextual cyber threat analysis."""
+        prompt = f"""You are an elite cybersecurity analyst. Your job is to analyze the following text and determine if it is a phishing attempt, social engineering attack, credential harvesting trap, or scam.
+Pay close attention to psychological manipulation, implicit urgency, or requests for sensitive information that standard regex might miss.
+
+Text to analyze:
+\"\"\"{text[:1000]}\"\"\"
+
+Output ONLY a raw JSON object (no markdown, no extra text) with:
+- "risk_score": Integer 0 to 100 representing the threat level.
+- "explanation": A one-sentence summary of the primary threat detected, or "No significant contextual threats detected." if safe.
+"""
+        response = self.groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": "You are a cyber threat NLP model. Output raw JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=150,
+            response_format={"type": "json_object"}
+        )
+
+        content = response.choices[0].message.content
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            return {"risk_score": 0, "explanation": "Failed to parse NLP response."}
 
     def _calculate_phishing_score(self, text: str) -> float:
         matches = sum(1 for keyword in self.phishing_keywords if keyword in text)
