@@ -20,6 +20,12 @@ numpy==1.26.2
 # External Verification Logic
 duckduckgo-search==4.2
 validators==0.22.0
+
+# Contextual NLP & Zero-Shot LLM Integrations
+groq>=0.4.2
+openai>=1.12.0
+
+# Deprecated / Legacy Verification
 google-generativeai==0.8.6
 
 # Legacy/Supplementary (Keep for model compatibility if needed)
