@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import './App.css';
 
 const API_URL = 'http://localhost:8000';
@@ -85,38 +87,38 @@ function RangeMarkers({ ranges, value }) {
 
 // ─── Range definitions ───────────────────────────────────────────────────────
 const FAKE_NEWS_RANGES = [
-  { min: 0,  max: 30,  label: 'Low Risk',  desc: 'Content appears credible',        color: '#22c55e' },
-  { min: 31, max: 60,  label: 'Moderate',  desc: 'Some suspicious indicators',       color: '#eab308' },
-  { min: 61, max: 80,  label: 'High Risk', desc: 'Likely misinformation',            color: '#f97316' },
-  { min: 81, max: 100, label: 'Critical',  desc: 'Strong misinformation signals',    color: '#ef4444' },
+  { min: 0, max: 30, label: 'Low Risk', desc: 'Content appears credible', color: '#22c55e' },
+  { min: 31, max: 60, label: 'Moderate', desc: 'Some suspicious indicators', color: '#eab308' },
+  { min: 61, max: 80, label: 'High Risk', desc: 'Likely misinformation', color: '#f97316' },
+  { min: 81, max: 100, label: 'Critical', desc: 'Strong misinformation signals', color: '#ef4444' },
 ];
 
 const NEWS_AUTH_RANGES = [
-  { min: 0,  max: 30,  label: 'Very Low',  desc: 'Content is highly unreliable',    color: '#ef4444' },
-  { min: 31, max: 60,  label: 'Low',       desc: 'Treat with caution',              color: '#f97316' },
-  { min: 61, max: 80,  label: 'Moderate',  desc: 'Generally credible',              color: '#eab308' },
-  { min: 81, max: 100, label: 'High',      desc: 'Strong authenticity indicators',  color: '#22c55e' },
+  { min: 0, max: 30, label: 'Very Low', desc: 'Content is highly unreliable', color: '#ef4444' },
+  { min: 31, max: 60, label: 'Low', desc: 'Treat with caution', color: '#f97316' },
+  { min: 61, max: 80, label: 'Moderate', desc: 'Generally credible', color: '#eab308' },
+  { min: 81, max: 100, label: 'High', desc: 'Strong authenticity indicators', color: '#22c55e' },
 ];
 
 const ORIGINALITY_RANGES = [
-  { min: 0,  max: 30,  label: 'Templated',    desc: 'Likely copied or generated',   color: '#ef4444' },
-  { min: 31, max: 60,  label: 'Low',          desc: 'Moderate reuse detected',       color: '#f97316' },
-  { min: 61, max: 80,  label: 'Moderate',     desc: 'Mostly original content',       color: '#eab308' },
-  { min: 81, max: 100, label: 'Highly Original', desc: 'Unique vocabulary & style',  color: '#22c55e' },
+  { min: 0, max: 30, label: 'Templated', desc: 'Likely copied or generated', color: '#ef4444' },
+  { min: 31, max: 60, label: 'Low', desc: 'Moderate reuse detected', color: '#f97316' },
+  { min: 61, max: 80, label: 'Moderate', desc: 'Mostly original content', color: '#eab308' },
+  { min: 81, max: 100, label: 'Highly Original', desc: 'Unique vocabulary & style', color: '#22c55e' },
 ];
 
 const CYBER_THREAT_RANGES = [
-  { min: 0,  max: 25,  label: 'Low',      desc: 'No significant threat detected',   color: '#22c55e' },
-  { min: 26, max: 50,  label: 'Medium',   desc: 'Some suspicious patterns',         color: '#eab308' },
-  { min: 51, max: 75,  label: 'High',     desc: 'Multiple threat indicators',       color: '#f97316' },
-  { min: 76, max: 100, label: 'Critical', desc: 'Immediate security concern',       color: '#ef4444' },
+  { min: 0, max: 25, label: 'Low', desc: 'No significant threat detected', color: '#22c55e' },
+  { min: 26, max: 50, label: 'Medium', desc: 'Some suspicious patterns', color: '#eab308' },
+  { min: 51, max: 75, label: 'High', desc: 'Multiple threat indicators', color: '#f97316' },
+  { min: 76, max: 100, label: 'Critical', desc: 'Immediate security concern', color: '#ef4444' },
 ];
 
 const CYBER_AUTH_RANGES = [
-  { min: 0,  max: 25,  label: 'Critical Risk', desc: 'Highly dangerous content',    color: '#ef4444' },
-  { min: 26, max: 50,  label: 'High Risk',     desc: 'Significant threat present',  color: '#f97316' },
-  { min: 51, max: 75,  label: 'Moderate',      desc: 'Some suspicious signals',     color: '#eab308' },
-  { min: 76, max: 100, label: 'Safe',          desc: 'No significant threat found', color: '#22c55e' },
+  { min: 0, max: 25, label: 'Critical Risk', desc: 'Highly dangerous content', color: '#ef4444' },
+  { min: 26, max: 50, label: 'High Risk', desc: 'Significant threat present', color: '#f97316' },
+  { min: 51, max: 75, label: 'Moderate', desc: 'Some suspicious signals', color: '#eab308' },
+  { min: 76, max: 100, label: 'Safe', desc: 'No significant threat found', color: '#22c55e' },
 ];
 
 // ─── Colour helpers ──────────────────────────────────────────────────────────
@@ -157,14 +159,14 @@ function App() {
   const [url, setUrl] = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [showDetails, setShowDetails] = useState(false);
 
   const fakeNewsSteps = [
     { label: 'Initializing deep analysis engine...', progress: 5 },
-    { label: 'Running ML Transformer analysis (RoBERTa)...', progress: 25 },
-    { label: 'Consulting Google Fact Check API...', progress: 50 },
+    { label: 'Running ML Transformer analysis (DeBERTa)...', progress: 25 },
+    { label: 'Consulting Groq Fact Check API...', progress: 50 },
     { label: 'Performing real-time Web verification...', progress: 75 },
     { label: 'Generating comprehensive report...', progress: 95 },
   ];
@@ -181,15 +183,19 @@ function App() {
 
   const analyzeContent = async () => {
     if (text.trim().length < 10) {
-      setError({ title: 'Input Too Short', message: 'Please enter at least 10 characters of text to analyze.', reason: null });
+      toast.error('Input Too Short: Please enter at least 10 characters of text to analyze.');
+      return;
+    }
+    if (text.trim().length > 1996) {
+      toast.error('Input Too Long: Please enter at most 1996 characters of text to analyze.');
       return;
     }
 
     setLoading(true);
-    setError(null);
     setResults(null);
     setShowSuccessAnimation(false);
     setLoadingStep(0);
+    setShowDetails(false);
 
     const stepInterval = setInterval(() => {
       setLoadingStep(prev => prev < steps.length - 1 ? prev + 1 : prev);
@@ -197,7 +203,7 @@ function App() {
 
     try {
       let analysisText = text.trim();
-      if (analysisText.length > 15000) analysisText = analysisText.substring(0, 15000);
+      if (analysisText.length > 1996) analysisText = analysisText.substring(0, 1996);
 
       const response = await axios.post(`${API_URL}/analyze`, {
         text: analysisText,
@@ -212,7 +218,6 @@ function App() {
         setTimeout(() => {
           setShowSuccessAnimation(false);
           setResults(response.data);
-          setError(null);
         }, 2200);
       }, 500);
     } catch (err) {
@@ -231,7 +236,7 @@ function App() {
         errorReason = 'Your device appears to be offline.';
       }
 
-      setError({ title: errorTitle, message: errorMessage, reason: errorReason });
+      toast.error(`${errorTitle}: ${errorMessage} - ${errorReason}`);
       setResults(null);
       setLoading(false);
     } finally {
@@ -242,26 +247,25 @@ function App() {
   const pasteFromClipboard = async () => {
     try {
       const clipboardText = await navigator.clipboard.readText();
-      if (clipboardText) { setText(clipboardText); setError(null); }
+      if (clipboardText) {
+        setText(clipboardText.substring(0, 1996));
+      }
     } catch (err) {
-      setError({
-        title: 'Clipboard Access Denied',
-        message: 'The browser blocked access to your clipboard.',
-        reason: 'Please ensure you have granted clipboard permissions to this site.'
-      });
+      toast.error('Clipboard Access Denied: The browser blocked access to your clipboard. Please ensure you have granted clipboard permissions to this site.');
     }
   };
 
   const clearForm = () => {
-    setText(''); setUrl(''); setResults(null); setError(null); setShowSuccessAnimation(false);
+    setText(''); setUrl(''); setResults(null); setShowSuccessAnimation(false);
   };
 
   const handleModeSwitch = (newMode) => {
-    setMode(newMode); setResults(null); setError(null);
+    setMode(newMode); setResults(null);
   };
 
   return (
     <div className="app">
+      <ToastContainer position="top-right" theme="dark" />
       <header className="header">
         <h1>🔍 Fake News & Cyber Threat Intelligence Analyzer</h1>
         <p>Percentage-based analysis for content authenticity and security threats</p>
@@ -305,9 +309,13 @@ function App() {
                   : 'Paste a suspicious email, message, URL description, or any potentially malicious content...'
               }
               rows={8}
+              maxLength={1996}
               aria-describedby="text-help"
             />
-            <small id="text-help">Minimum 10 characters required</small>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+              <small id="text-help">Minimum 10 characters required</small>
+              <small style={{ color: '#9ca3af' }}>{text.length} / 1996 (Text limit)</small>
+            </div>
           </div>
 
           <div className="input-group">
@@ -344,16 +352,6 @@ function App() {
             </button>
             <button id="btn-clear" onClick={clearForm} className="btn-secondary">Clear</button>
           </div>
-
-          {!loading && error && !results && (
-            <div className="error-message" role="alert">
-              <div className="error-title"><span>⚠️</span> {error.title}</div>
-              <div className="error-detail">{error.message}</div>
-              {error.reason && (
-                <div className="error-reason"><strong>Technical Cause:</strong> {error.reason}</div>
-              )}
-            </div>
-          )}
         </section>
 
         {/* Success overlay */}
@@ -440,11 +438,20 @@ function App() {
                 )}
 
                 <div className="details-section">
-                  <h3>📊 Detailed Analysis</h3>
-                  <div className="details-grid">
-                    <FactorCard title="Fake News Factors" factors={results.analysis_details.fake_news_factors} />
-                    <FactorCard title="Originality Factors" factors={results.analysis_details.originality_factors} />
+                  <div
+                    onClick={() => setShowDetails(!showDetails)}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <h3 style={{ margin: 0 }}>📊 Detailed Analysis</h3>
+                    <span style={{ fontSize: '1.2rem', transform: showDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
                   </div>
+
+                  {showDetails && (
+                    <div className="details-grid" style={{ marginTop: '1.5rem' }}>
+                      <FactorCard title="Fake News Factors" factors={results.analysis_details.fake_news_factors} />
+                      <FactorCard title="Originality Factors" factors={results.analysis_details.originality_factors} />
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -470,10 +477,19 @@ function App() {
                 </div>
 
                 <div className="details-section">
-                  <h3>📊 Threat Intelligence Breakdown</h3>
-                  <div className="details-grid">
-                    <FactorCard title="Cyber Threat Factors" factors={results.analysis_details.cyber_threat_factors} />
+                  <div
+                    onClick={() => setShowDetails(!showDetails)}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <h3 style={{ margin: 0 }}>📊 Threat Intelligence Breakdown</h3>
+                    <span style={{ fontSize: '1.2rem', transform: showDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
                   </div>
+
+                  {showDetails && (
+                    <div className="details-grid" style={{ marginTop: '1.5rem' }}>
+                      <FactorCard title="Cyber Threat Factors" factors={results.analysis_details.cyber_threat_factors} />
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -491,11 +507,14 @@ function App() {
 
 // ─── Factor Card ─────────────────────────────────────────────────────────────
 function FactorCard({ title, factors }) {
-  const { explanation, detected_threats, ...otherFactors } = factors;
+  const { explanation, detected_threats, ai_analysis, web_sources, ...otherFactors } = factors;
+  const [isSourcesExpanded, setIsSourcesExpanded] = useState(false);
 
   const formatValue = (key, value) => {
     if (typeof value === 'boolean') return value ? '✅ Yes' : '❌ No';
     if (value === null || value === undefined) return 'N/A';
+    if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : 'None';
+    if (typeof value === 'object') return JSON.stringify(value);
     const percentageKeys = [
       'probability', 'score', 'ml_probability', 'heuristic_score',
       'nlp_adjustment', 'absurdity_score', 'clickbait_score',
@@ -503,7 +522,7 @@ function FactorCard({ title, factors }) {
     ];
     const isPercentage = percentageKeys.some(p => key.includes(p));
     if (typeof value === 'number') return isPercentage ? `${value}%` : value;
-    return value;
+    return String(value);
   };
 
   return (
@@ -515,7 +534,59 @@ function FactorCard({ title, factors }) {
       {detected_threats && (
         <div className="card-summary threats">
           <strong>Detected Threats:</strong>{' '}
-          {Array.isArray(detected_threats) ? detected_threats.join(', ') : detected_threats}
+          {Array.isArray(detected_threats) ? detected_threats.join(', ') : String(detected_threats)}
+        </div>
+      )}
+      {/* AI Verifier Analysis — shown as its own block */}
+      {ai_analysis && ai_analysis.reasoning && (
+        <div className="card-summary" style={{ borderLeft: '3px solid #8b5cf6', paddingLeft: '8px', marginBottom: '8px' }}>
+          <strong>🤖 Explainable AI:</strong>
+          <div style={{ marginTop: '4px', fontSize: '0.85em', opacity: 0.85 }}>
+            {ai_analysis.reasoning}
+          </div>
+        </div>
+      )}
+      {/* Web Sources Display */}
+      {web_sources && web_sources.length > 0 && (
+        <div className="card-summary" style={{ borderLeft: '3px solid #0ea5e9', paddingLeft: '8px', marginBottom: '8px' }}>
+          <div
+            onClick={() => setIsSourcesExpanded(!isSourcesExpanded)}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+          >
+            <strong>🌐 Searched Sources ({web_sources.length})</strong>
+            <span style={{ fontSize: '1.1em', transform: isSourcesExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+              ▼
+            </span>
+          </div>
+
+          {isSourcesExpanded && (
+            <ul style={{ paddingLeft: '20px', marginTop: '8px', fontSize: '0.9em', listStyleType: 'none', marginLeft: '-20px' }}>
+              {web_sources.map((source, idx) => {
+                let domain = source.url;
+                try { domain = new URL(source.url).hostname.replace('www.', ''); } catch (e) { }
+
+                return (
+                  <li key={idx} style={{ marginBottom: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px' }}>
+                    <a href={source.url} target="_blank" rel="noopener noreferrer"
+                      style={{ color: source.is_credible ? '#10b981' : '#f59e0b', textDecoration: 'none', fontWeight: '500' }}>
+                      {source.is_credible ? '✅' : '⚠️'} {domain}
+                    </a>
+                    {source.title && (
+                      <div style={{ fontSize: '0.85em', opacity: 0.8, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {source.title}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
       <ul>
