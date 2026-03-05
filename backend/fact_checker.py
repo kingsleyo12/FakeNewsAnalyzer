@@ -1,18 +1,30 @@
 """
-Fact Checker Module
-Uses Google Fact Check Tools API
-Improved confidence scoring + better claim extraction
+Fact Checker Module (LLM Zero-Shot Agent)
+Uses Groq's Llama-3-70B model to verify historical, scientific, and political claims
+based on its extensive pre-training data.
 """
 
-import requests
-import re
+import os
+import json
+import logging
 from typing import Dict, List, Optional
+from groq import Groq
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class FactChecker:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.base_url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
+        try:
+            self.client = Groq(api_key=api_key)
+            self.model = "llama-3.3-70b-versatile"  # Powerful model for factual recall
+            # logger.info("  Fact Checker initialized with Groq API (Llama-3-70B)")
+        except Exception as e:
+            logger.error(f"Failed to initialize Groq Fact Checker: {e}")
+            self.client = None
 
+        # Known absurd claims that don't even need API calls
         self.known_false_claims = [
             'hand clapping cures cancer',
             'clapping hands cures cancer',
@@ -34,82 +46,45 @@ class FactChecker:
         ]
 
     def check_claims(self, text: str) -> Dict:
-        claims = self._extract_claims(text)
+        if not self.client:
+            return {
+                'verdict': 'UNVERIFIED',
+                'confidence': 0,
+                'fact_checks_found': 0,
+                'explanation': 'Client not initialized'
+            }
 
-        if not claims:
+        if not text or len(text.strip()) < 10:
             return {
                 'verdict': 'UNVERIFIED',
                 'confidence': 30,
                 'fact_checks_found': 0,
-                'explanation': 'No specific claims found to fact-check'
+                'explanation': 'Input too short to fact-check'
             }
 
+        # Fast path: skip LLM for obvious conspiracy theories
         known_false = self._check_known_false(text.lower())
         if known_false:
             return {
                 'verdict': 'FALSE',
                 'confidence': 95,
                 'fact_checks_found': 1,
-                'explanation': 'Contains known debunked claim',
+                'explanation': 'Matches known universally debunked claim',
                 'matched_claim': known_false
             }
 
-        fact_check_results = []
-        for claim in claims[:3]:
-            try:
-                print(f"[*] Querying API for: {claim}")
-                results = self._query_google_factcheck(claim)
-                if results:
-                    fact_check_results.extend(results)
-            except Exception as e:
-                print(f"Fact check API error: {e}")
-
-        return self._calculate_verdict(fact_check_results)
-
-    def _extract_claims(self, text: str) -> List[str]:
-        sentences = re.split(r'(?<![\d])([.!?]+)(?![\d])', text)
-        sentences = [s.strip() for s in sentences if s and not re.fullmatch(r'[.!?]+', s.strip())]
-
-        claims = []
-        for sentence in sentences[:10]:
-            if len(sentence) < 20:
-                continue
-
-            claim_indicators = [
-                'according to', 'scientists', 'researchers', 'study shows',
-                'data shows', 'report', 'claims', 'states that', 'confirms',
-                'proves', 'evidence', 'found that', 'discovered', 'announced'
-            ]
-
-            if any(i in sentence.lower() for i in claim_indicators):
-                clean = self._clean_claim(sentence)
-                if clean:
-                    claims.append(clean)
-
-        if not claims:
-            for sentence in sentences[:3]:
-                clean = self._clean_claim(sentence)
-                if clean:
-                    claims.append(clean)
-
-        return list(dict.fromkeys(claims))[:3]
-
-    def _clean_claim(self, claim: str) -> Optional[str]:
-        fluff = ['BREAKING:', 'SHOCKING:', 'JUST IN:', 'READ MORE:', 'WATCH:',
-                 'EXCLUSIVE:', 'URGENT:', 'UPDATE:']
-        for f in fluff:
-            claim = claim.replace(f, '').replace(f.lower(), '')
-
-        claim = re.sub(r'^(and|but|so|then|also|however|meanwhile)\s+', '', claim.strip(), flags=re.IGNORECASE)
-        claim = ' '.join(claim.split())
-        claim = re.sub(r"'s\b", '', claim)
-        claim = re.sub(r'["\']', '', claim)
-
-        words = claim.split()
-        if len(words) < 4:
-            return None
-
-        return ' '.join(words[:14])  # improved matching
+        try:
+            # Query the LLM
+            logger.info("[*] Querying Llama-3 Fact Checker Agent...")
+            return self._query_llm_fact_checker(text)
+        except Exception as e:
+            logger.error(f"LLM Fact Check API error: {e}")
+            return {
+                'verdict': 'UNVERIFIED',
+                'confidence': 40,
+                'fact_checks_found': 0,
+                'explanation': f'LLM API Exception: {str(e)}'
+            }
 
     def _check_known_false(self, text_lower: str) -> Optional[str]:
         clean_text = text_lower.replace('-', ' ').replace('_', ' ')
@@ -119,107 +94,84 @@ class FactChecker:
                 return false_claim
         return None
 
-    def _query_google_factcheck(self, claim: str) -> List[Dict]:
+    def _query_llm_fact_checker(self, text: str) -> Dict:
+        prompt = f"""You are a professional fact-checker like Snopes or PolitiFact.
+Analyze the following text/claims and determine if the core factual assertions are TRUE, FALSE, MIXED, or UNVERIFIED (if you don't know or if it's pure opinion).
+
+Text to analyze:
+\"\"\"{text}\"\"\"
+
+Output your response ONLY as a strictly valid JSON object. Do not include markdown code blocks.
+Format:
+{{
+    "verdict": "TRUE" | "FALSE" | "MIXED" | "UNVERIFIED",
+    "confidence": integer between 0 and 100,
+    "explanation": "A concise 1-sentence explanation of why it is true or false."
+}}
+"""
+        
+        # We enforce a JSON response format using Llama 3's function-calling/json mode
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": "You are a highly accurate, objective fact-checking AI. Output only raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0, # Complete determinism for fact checking
+            max_tokens=200,
+            response_format={"type": "json_object"}
+        )
+
+        content = response.choices[0].message.content
+        
         try:
-            params = {'key': self.api_key, 'query': claim, 'languageCode': 'en'}
-            response = requests.get(self.base_url, params=params, timeout=10)
+            result = json.loads(content)
+            
+            # Normalize the output
+            verdict = result.get('verdict', 'UNVERIFIED').upper()
+            if verdict not in ['TRUE', 'FALSE', 'MIXED', 'UNVERIFIED']:
+                verdict = 'UNVERIFIED'
+                
+            confidence = int(result.get('confidence', 50))
+            explanation = result.get('explanation', 'AI Fact Checker provided no explanation.')
 
-            if response.status_code != 200:
-                print("Fact Check API error:", response.status_code)
-                return []
-
-            data = response.json()
-            results = []
-
-            for claim_review in data.get('claims', []):
-                for review in claim_review.get('claimReview', []):
-                    results.append({
-                        'rating': review.get('textualRating', ''),
-                        'publisher': review.get('publisher', {}).get('name', 'Unknown'),
-                        'title': review.get('title', ''),
-                        'url': review.get('url', ''),
-                        'claim_text': claim_review.get('text', '')
-                    })
-
-            return results
-
-        except Exception as e:
-            print("Fact Check API error:", e)
-            return []
-
-    def _calculate_verdict(self, fact_check_results: List[Dict]) -> Dict:
-        if not fact_check_results:
+            return {
+                'verdict': verdict,
+                'confidence': confidence,
+                'fact_checks_found': 1 if verdict != 'UNVERIFIED' else 0,
+                'explanation': f"{explanation}"
+            }
+            
+        except json.JSONDecodeError:
+            logger.error("Failed to parse LLM JSON output")
             return {
                 'verdict': 'UNVERIFIED',
                 'confidence': 40,
                 'fact_checks_found': 0,
-                'explanation': 'No fact-checks found for these claims'
+                'explanation': 'Failed to parse AI response'
             }
-
-        false_keywords = ['pants on fire', 'mostly false', 'false', 'incorrect', 'fake']
-        true_keywords = ['mostly true', 'true', 'correct', 'accurate']
-        mixed_keywords = ['mixed', 'half true', 'half-true', 'partly']
-
-        false_count = true_count = mixed_count = 0
-
-        for r in fact_check_results:
-            rating = r['rating'].lower()
-            if any(k in rating for k in false_keywords):
-                false_count += 1
-            elif any(k in rating for k in true_keywords):
-                true_count += 1
-            elif any(k in rating for k in mixed_keywords):
-                mixed_count += 1
-
-        total = len(fact_check_results)
-        publishers = list({r['publisher'] for r in fact_check_results})
-        publisher_bonus = min(len(publishers) * 5, 15)
-
-        if false_count:
-            confidence = min(75 + false_count * 10, 95)
-            return {
-                'verdict': 'FALSE',
-                'confidence': confidence,
-                'fact_checks_found': total,
-                'explanation': f'Rated FALSE by {false_count} fact-checker(s): {", ".join(publishers[:3])}',
-                'sources': fact_check_results[:3]
-            }
-
-        if true_count > false_count:
-            confidence = min(70 + true_count * 12 + publisher_bonus, 95)
-            return {
-                'verdict': 'TRUE',
-                'confidence': confidence,
-                'fact_checks_found': total,
-                'explanation': f'Verified TRUE by {true_count} fact-checker(s): {", ".join(publishers[:3])}',
-                'sources': fact_check_results[:3]
-            }
-
-        if mixed_count:
-            return {
-                'verdict': 'MIXED',
-                'confidence': 55,
-                'fact_checks_found': total,
-                'explanation': f'Mixed ratings from {total} fact-checker(s)',
-                'sources': fact_check_results[:3]
-            }
-
-        return {
-            'verdict': 'UNVERIFIED',
-            'confidence': 50,
-            'fact_checks_found': total,
-            'explanation': f'Found {total} fact-check(s) but ratings unclear',
-            'sources': fact_check_results[:3]
-        }
-
 
 if __name__ == "__main__":
-    API_KEY = input("Enter your Google Fact Check API key: ").strip()
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    API_KEY = os.environ.get('GROQ_API_KEY')
+    if not API_KEY:
+        print("Please set GROQ_API_KEY environment variable")
+        exit(1)
+        
     checker = FactChecker(API_KEY)
 
+    print("\n--- Test 1 ---")
     test_claim = "The United Nations has 193 member states."
     result = checker.check_claims(test_claim)
-
-    print("\nVerdict:", result["verdict"])
-    print("Confidence:", result["confidence"])
-    print("Explanation:", result["explanation"])
+    print(f"Verdict: {result['verdict']}")
+    print(f"Confidence: {result['confidence']}")
+    print(f"Explanation: {result['explanation']}")
+    
+    print("\n--- Test 2 ---")
+    test_claim = "Abraham Lincoln was the first president of the United States."
+    result = checker.check_claims(test_claim)
+    print(f"Verdict: {result['verdict']}")
+    print(f"Confidence: {result['confidence']}")
+    print(f"Explanation: {result['explanation']}")
