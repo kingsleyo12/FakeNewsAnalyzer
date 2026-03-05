@@ -39,9 +39,9 @@ class WebSearchVerifier:
         self.brave_api_key  = os.environ.get('BRAVE_SEARCH_KEY', '')
 
         if self.serper_api_key:
-            print(" Serper.dev API key found — using Serper as primary search provider.")
+            print(" Serper.dev module enabled")
         elif self.brave_api_key:
-            print(" Brave Search API key found — using Brave as primary search provider.")
+            print(" Brave Search module enabled")
         else:
             print("  No search API key found — falling back to DuckDuckGo (may be rate-limited).")
             print("  Tip: Sign up free at https://serper.dev — 2,500 free queries, no credit card.")
@@ -109,9 +109,10 @@ class WebSearchVerifier:
                 results = self._search_claim(claim)
                 all_results.extend(results)
                 
-                # Count credible sources
+                # Check and label credible sources
                 for result in results:
-                    if self._is_credible_source(result['url']):
+                    result['is_credible'] = self._is_credible_source(result['url'])
+                    if result['is_credible']:
                         credible_count += 1
                     
                     # Check if it's a fact-check article
