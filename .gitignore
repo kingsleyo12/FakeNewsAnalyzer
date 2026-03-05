@@ -23,3 +23,7 @@ frontend/dist/
 backend/old_files/
 *.log
 tmp/
+HOW_IT_WORKS.md
+TECHNICAL_DEEP_DIVE.md
+NLP_ACCURACY_JUSTIFICATION.md
+
