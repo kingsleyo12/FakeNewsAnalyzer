@@ -32,11 +32,18 @@ except ImportError:
     print("Warning: Web search not available")
 
 try:
-    from gemini_analyzer import GeminiAnalyzer
-    GEMINI_AVAILABLE = True
+    from artificial_verifier import ArtificialVerifier
+    AI_VERIFIER_AVAILABLE = True
 except ImportError:
-    GEMINI_AVAILABLE = False
-    print("Warning: Gemini analyzer not available")
+    AI_VERIFIER_AVAILABLE = False
+    print("Warning: AI Verifier not available")
+
+try:
+    from nlp_analyzer import get_nlp_features
+    NLP_ANALYZER_AVAILABLE = True
+except ImportError:
+    NLP_ANALYZER_AVAILABLE = False
+    print("Warning: Advanced NLP Analyzer not available")
 
 class HybridFakeNewsAnalyzer:
     def __init__(self):
@@ -58,7 +65,6 @@ class HybridFakeNewsAnalyzer:
             try:
                 MODEL_ID = "MoritzLaurer/deberta-v3-base-mnli-fever-docnli-ling-2c"
                 print(f" Loading {MODEL_ID} (using local cache if available)...")
-                print("  Note: first-time download is ~400 MB — this may take a minute.")
                 try:
                     self.ml_model = pipeline(
                         "zero-shot-classification",
@@ -90,53 +96,77 @@ class HybridFakeNewsAnalyzer:
     def _initialize_patterns(self):
         """Initialize all pattern matching rules"""
         
-        # Strong fake news indicators (conspiracy, misinformation)
+        # Strong fake news indicators (conspiracy, misinformation, extreme bias)
         self.strong_fake_indicators = [
             'they don\'t want you to know', 'what they\'re hiding', 'the truth they',
             'mainstream media won\'t tell', 'doctors hate', 'big pharma', 'deep state',
             'wake up', 'open your eyes', 'do your own research', 'question everything',
             'government coverup', 'conspiracy', 'illuminati', 'new world order',
-            'suppressed information', 'censored', 'banned', 'forbidden knowledge'
+            'suppressed information', 'censored', 'banned', 'forbidden knowledge',
+            'false flag', 'crisis actor', 'mind control', 'globalist', 'secret society',
+            'shadow government', 'qanon', 'the storm is here', 'great reset',
+            'plandemic', 'bioweapon', 'microchip implant', '5g mind control',
+            'adrenochrome', 'cabals', 'brainwashing', 'sheeple', 'truthers',
+            'media blackout', 'elite agenda', 'depopulation agenda'
         ]
         
-        # Absurdity/Satire indicators
+        # Absurdity/Satire indicators (impossible/sci-fi concepts presented as real news)
         self.absurdity_patterns = [
             'scientists discover', 'study shows', 'researchers find',
             'miracle cure', 'secret revealed', 'this one trick',
             'you won\'t believe', 'shocked', 'stunning', 'incredible',
-            'hand clapping', 'telepathy', 'psychic', 'alien',
-            'flat earth', 'chemtrails', 'crystal healing'
+            'hand clapping', 'telepathy', 'psychic', 'alien', 'ufos', 'ufo',
+            'extraterrestrial', 'holographic', 'lizard people', 'reptilian',
+            'flat earth', 'chemtrails', 'crystal healing', 'space lasers',
+            'time travel', 'hollow earth', 'vampire', 'werewolf', 'bigfoot',
+            'nessie', 'loch ness monster', 'illuminati clone', 'clone replaced',
+            'shapeshifter', 'demonic possession', 'matrix glitch', 'simulation theory',
+            'ancient astronaut', 'nibiru', 'planet x', 'immortality pill'
         ]
         
-        # Pseudo-science markers
+        # Pseudo-science markers (fake medical/scientific claims)
         self.pseudoscience_keywords = [
             'quantum healing', 'energy frequency', 'vibration',
             'detox', 'cleanse', 'toxins', 'natural remedy',
-            'ancient secret', 'chakra', 'aura', 'manifesting'
+            'ancient secret', 'chakra', 'aura', 'manifesting',
+            'homeopathic', 'essential oil cure', 'miracle mineral',
+            'alkaline water', 'healing crystals', 'magnet therapy',
+            'colloidal silver', 'ivermectin miracle', 'bleach cure',
+            'biohacking secret', 'energy alignment', 'third eye',
+            'pineal gland decalcification', 'spiritual awakening'
         ]
         
-        # Clickbait patterns
+        # Clickbait patterns (hyperbolic emotion-driven headlines)
         self.clickbait_patterns = [
             'you won\'t believe', 'what happens next', 'will shock you',
             'doctors hate him', 'this one trick', 'number 7 will',
-            'must see', 'going viral', 'breaking',
-            'everyone is talking about', 'you need to see'
+            'must see', 'going viral', 'breaking', 'bombshell',
+            'everyone is talking about', 'you need to see', 'nobody is talking about',
+            'finally revealed', 'left speechless', 'tears of joy', 'mind blown',
+            'banned from tv', 'internet is breaking', 'the internet is losing it',
+            'x destroyed by', 'obliterates', 'eviscerates', 'slams', 'claps back',
+            'what she found', 'the real reason', 'why you should never'
         ]
         
-        # Humor/satire indicators
+        # Humor/satire indicators (hedging language common in The Onion / Babylon Bee)
         self.satire_indicators = [
             'reportedly', 'sources say', 'allegedly', 'claims to',
             'purportedly', 'supposedly', 'is said to', 'appears to',
-            'witnesses report', 'insiders claim', 'experts suggest'
+            'witnesses report', 'insiders claim', 'experts suggest',
+            'local man', 'local woman', 'area man', 'man claims',
+            'at press time', 'breaking news:', 'according to a new study'
         ]
         
-        # Credibility boosters (legitimate journalism)
+        # Credibility boosters (legitimate journalism language)
         self.credibility_indicators = [
             'according to', 'study published in', 'research from',
             'peer-reviewed', 'data shows', 'statistics indicate',
             'analysis by', 'reported by', 'confirmed by',
             'spokesperson said', 'official statement', 'press release',
-            'academic journal', 'university study'
+            'academic journal', 'university study', 'department of defense announced',
+            'white house officials', 'internal documents', 'obtained by',
+            'records show', 'court filings', 'independent investigation',
+            'world health organization', 'united nations', 'cdc guidelines'
         ]
         
         # Trusted news sources
@@ -160,8 +190,8 @@ class HybridFakeNewsAnalyzer:
         if not text or len(text.strip()) < 10:
             return self._error_response("Text too short for analysis")
         
-        # Truncate very long texts (transformer limit is 512 tokens)
-        text_for_ml = text[:512]   # DeBERTa max_length=512 tokens; 512 chars ≈ 400 tokens
+        # Truncate very long texts (transformer limit is 499 tokens)
+        text_for_ml = text[:1996]   # DeBERTa max_length=499 tokens; cap input string at 1996 chars
         text_lower = text.lower()
         
         # COMPONENT 1: Pre-trained ML Model (50% weight)
@@ -171,21 +201,46 @@ class HybridFakeNewsAnalyzer:
         heuristic_score = self._get_heuristic_score(text_lower)
         
         # COMPONENT 3: NLP Analysis (20% weight)
-        nlp_adjustment = self._get_nlp_adjustment(text_lower)
+        nlp_adjustment = self._get_nlp_adjustment(text)
         
-        # Combine scores with weights
+        # ── Confidence Gating ─────────────────────────────────────────
+        # DeBERTa's weight is dynamic: the model only earns a heavy vote
+        # when it is genuinely sure about its output. When it sits in the
+        # ambiguous 40-60% band it is essentially guessing, so we demote
+        # its influence and let the rule-based components carry the weight.
         if self.ml_available:
-            # Full hybrid: ML (50%) + Heuristics (30%) + NLP (20%)
-            final_score = (
-                ml_score * 0.50 +
-                heuristic_score * 0.30 +
-                nlp_adjustment * 0.20
-            )
+            ml_confidence_zone = 'unsure' if 40 < ml_score < 60 else \
+                                 'very_confident' if (ml_score >= 80 or ml_score <= 20) else \
+                                 'confident'
+
+            if ml_confidence_zone == 'unsure':
+                # ML is guessing — keep it at just 10%, hand 90% to rules
+                print(f"  [Confidence Gate] ML unsure ({ml_score:.1f}%) → weight reduced to 10%")
+                final_score = (
+                    ml_score        * 0.10 +
+                    heuristic_score * 0.55 +
+                    nlp_adjustment  * 0.35
+                )
+            elif ml_confidence_zone == 'very_confident':
+                # ML is strongly sure — let it dominate at 70%
+                print(f"  [Confidence Gate] ML very confident ({ml_score:.1f}%) → weight raised to 70%")
+                final_score = (
+                    ml_score        * 0.70 +
+                    heuristic_score * 0.20 +
+                    nlp_adjustment  * 0.10
+                )
+            else:
+                # ML is confident but not extreme — standard split
+                final_score = (
+                    ml_score        * 0.50 +
+                    heuristic_score * 0.30 +
+                    nlp_adjustment  * 0.20
+                )
         else:
-            # Fallback: Heuristics (60%) + NLP (40%)
+            # Fallback when ML model is not available: Heuristics (60%) + NLP (40%)
             final_score = (
                 heuristic_score * 0.60 +
-                nlp_adjustment * 0.40
+                nlp_adjustment  * 0.40
             )
         
         # Apply thresholds and constraints
@@ -231,7 +286,7 @@ class HybridFakeNewsAnalyzer:
                 text,
                 candidate_labels=self.ZS_LABELS,
                 truncation=True,
-                max_length=512
+                max_length=499
             )
 
             # result["labels"] is sorted by score descending
@@ -274,10 +329,22 @@ class HybridFakeNewsAnalyzer:
     
     def _get_nlp_adjustment(self, text: str) -> float:
         """
-        NLP-based adjustments (simplified version without spaCy/NLTK for now)
+        NLP-based adjustments. Uses Advanced NLP Analyzer if available,
+        otherwise falls back to simplified regex rules.
         Returns adjustment score (0-100)
         """
+        if NLP_ANALYZER_AVAILABLE:
+            try:
+                features = get_nlp_features(text)
+                # nlp_credibility is 0-100 credibility (where 100 is highly credible).
+                # We need to return a fake score (where 100 is highly fake).
+                nlp_credibility = features.get("nlp_credibility_score", 50)
+                return max(0, min(100 - nlp_credibility, 100))
+            except Exception as e:
+                print(f"NLP Analyzer error: {e}")
+                
         score = 50  # Start neutral
+        text_lower = text.lower()
         
         # Check for excessive punctuation (!!!, ???)
         excessive_punct = len(re.findall(r'[!?]{2,}', text))
@@ -292,7 +359,7 @@ class HybridFakeNewsAnalyzer:
             'shocking', 'amazing', 'unbelievable', 'incredible',
             'outrageous', 'scandal', 'disaster', 'crisis'
         ]
-        emotion_count = sum(1 for word in emotional_words if word in text)
+        emotion_count = sum(1 for word in emotional_words if word in text_lower)
         score += min(emotion_count * 5, 15)
         
         # Check sentence length (very short sentences can indicate clickbait)
@@ -412,11 +479,11 @@ class HybridFakeNewsAnalyzer:
         # ML component
         if self.ml_available:
             if ml_score > 70:
-                explanations.append("AI model: High fake probability detected")
+                explanations.append("High fake probability detected")
             elif ml_score > 50:
-                explanations.append("AI model: Moderate fake probability")
+                explanations.append("Moderate fake probability")
             elif ml_score < 30:
-                explanations.append("AI model: Low fake probability (likely authentic)")
+                explanations.append("Low fake probability (likely authentic)")
         
         # Heuristic findings
         fake_indicators = self._count_patterns(text, self.strong_fake_indicators)
@@ -489,13 +556,13 @@ class FakeNewsAnalyzer:
         # Fact checker
         try:
             from fact_checker import FactChecker
-            api_key = os.environ.get('GOOGLE_FACT_CHECK_KEY')
+            api_key = os.environ.get('GROQ_API_KEY')
             if api_key:
                 self.fact_checker = FactChecker(api_key)
-                print(" Google Fact Check API enabled")
+                print(" Zero-Shot LLM Fact Checker (Groq) enabled")
             else:
                 self.fact_checker = None
-                print("  No API key found in .env")
+                print("  No GROQ_API_KEY found in .env for Fact Checker")
         except ImportError as e:
             self.fact_checker = None
             print(f"  Fact checker module not found: {e}")
@@ -503,17 +570,17 @@ class FakeNewsAnalyzer:
             self.fact_checker = None
             print(f"  Fact checker error: {e}")
 
-        # Gemini Analyzer
-        if GEMINI_AVAILABLE:
-            gemini_key = os.environ.get('GOOGLE_GEMINI_KEY')
-            if gemini_key:
-                self.gemini_analyzer = GeminiAnalyzer(gemini_key)
-                print(" Google Gemini AI enabled")
+        # Contextual NLP Verifier (Groq/Llama3 replacement)
+        if AI_VERIFIER_AVAILABLE:
+            groq_key = os.environ.get('GROQ_API_KEY')
+            if groq_key:
+                self.ai_verifier = ArtificialVerifier(groq_key)
+                print(" Contextual NLP Engine (Groq/Llama3) enabled")
             else:
-                self.gemini_analyzer = None
-                print("  No Google Gemini key found in .env")
+                self.ai_verifier = None
+                print("  No GROQ_API_KEY found in .env")
         else:
-            self.gemini_analyzer = None
+            self.ai_verifier = None
 
     def analyze(self, text: str):
         result = self.analyzer.analyze(text)
@@ -523,7 +590,7 @@ class FakeNewsAnalyzer:
         ml_success = result['components']['ml_probability'] is not None
         web_success = False
         fact_check_success = False
-        gemini_success = False
+        ai_success = False
 
         # Web search layer - Ensure it runs for ALL scores to meet "full analysis" requirement
         web_search_result = None
@@ -550,23 +617,44 @@ class FakeNewsAnalyzer:
             except Exception as e:
                 print(f" Fact check error: {e}")
 
-        # Gemini Reasoning layer
-        gemini_result = None
-        if self.gemini_analyzer:
+        # AI Reasoning layer — with Tiebreaker Override
+        ai_result = None
+        if self.ai_verifier:
             try:
-                gemini_result = self.gemini_analyzer.analyze_text(text)
-                # Weighted impact of Gemini (reasoning-based)
-                # If Gemini says highly likely fake (e.g. 80%), it moves the base score
-                gemini_impact = (gemini_result['probability'] - 50) * 0.4
-                base_score += gemini_impact
-                base_score = max(0, min(base_score, 100))
-                print(f" Gemini AI: {gemini_result['verdict']} ({gemini_result['probability']}% prob)")
-                gemini_success = True
-            except Exception as e:
-                print(f" Gemini error: {e}")
+                ai_result = self.ai_verifier.analyze_text(text)
+                ai_prob = ai_result['probability']
 
-        # Check if all modules gave results (Full comprehensive now includes Gemini)
-        is_full = ml_success and web_success and fact_check_success and gemini_success
+                base_is_ambiguous  = 40 <= base_score <= 60
+                large_disagreement = abs(ai_prob - base_score) >= 50
+                ai_is_confident    = ai_prob >= 75 or ai_prob <= 25
+                ai_is_very_sure    = ai_prob >= 88 or ai_prob <= 12
+
+                if (base_is_ambiguous or large_disagreement) and ai_is_very_sure:
+                    # Tiebreaker / Override: base is on the fence OR completely wrong, and Llama is strongly sure.
+                    # Let the NLP score dominate (80%) with a small base anchor (20%).
+                    print(f"  [Confidence Gate] Base: {base_score:.1f}%, Contextual NLP very sure ({ai_prob}%) → NLP tiebreaker override")
+                    base_score = (ai_prob * 0.80) + (base_score * 0.20)
+                elif (base_is_ambiguous or large_disagreement) and ai_is_confident:
+                    # Base is unsure or highly mismatched, NLP is meaningfully confident — shift 60% toward NLP.
+                    print(f"  [Confidence Gate] Base: {base_score:.1f}%, Contextual NLP confident ({ai_prob}%) → partial NLP override")
+                    base_score = (ai_prob * 0.60) + (base_score * 0.40)
+                else:
+                    # Standard case: NLP nudges the score by up to ±20 pts
+                    ai_impact = (ai_prob - 50) * 0.4
+                    base_score += ai_impact
+
+                base_score = max(0, min(base_score, 100))
+                print(f"  NLP Engine: {ai_result['verdict']} ({ai_prob}% prob) | final base → {base_score:.1f}%")
+                ai_success = True
+            except Exception as e:
+                print(f" NLP Engine error: {e}")
+
+        # Check if all modules gave results (Full comprehensive now includes AI)
+        is_full = ml_success and web_success and fact_check_success and ai_success
+
+        # Channel fact checker explanation into the AI reasoning UI block
+        if fact_check_result and ai_result and 'explanation' in fact_check_result:
+            ai_result['reasoning'] = f"Fact Check: {fact_check_result['explanation']} | Analysis: {ai_result.get('reasoning', '')}"
 
         return {
             "probability": round(base_score, 1),
@@ -578,10 +666,10 @@ class FakeNewsAnalyzer:
                 "model_used": result['components']['model_used'],
                 "web_verification": web_search_result['explanation'] if web_search_result else None,
                 "credible_sources_found": web_search_result['credible_sources_found'] if web_search_result else 0,
+                "web_sources": web_search_result.get('sources', []) if web_search_result else [],
                 "fact_check_verdict": fact_check_result['verdict'] if fact_check_result else None,
                 "fact_check_confidence": fact_check_result['confidence'] if fact_check_result else None,
-                "fact_check_explanation": fact_check_result['explanation'] if fact_check_result else None,
-                "gemini_analysis": gemini_result if gemini_result else None,
+                "ai_analysis": ai_result if ai_result else None,
                 "explanation": result['explanation'],
                 "strong_fake_indicators": result['factors']['strong_fake_indicators'],
                 "absurdity_score": result['factors']['absurdity_score'],
