@@ -11,3 +11,5 @@ All notable changes to this project will be documented in this file.
 - **`backend/fake_news.py`**: (Lines 96-146) Massively expanded the rules-based string matching dictionaries inside `_initialize_patterns`. Added over 75+ modern terms related to absurd sci-fi plots, dark-web conspiracy theories (e.g., adrenochrome, QAnon), health pseudoscience, and clickbait to greatly improve baseline heuristic accuracy when the AI models are unsure.
 
 - **`backend/cyber_threat.py`**: (Lines 83-176) Implemented approach #1: integrated a Zero-Shot Contextual AI Threat Engine using Groq (llama-3.1-8b-instant). If the AI detects sophisticated social engineering that bypasses legacy regex filters, it now dynamically boosts the total isk_score and populates the i_threat_analysis factor with a detailed reasoning string for the UI.
+
+- **\ackend/requirements.txt\**: Added \groq\ and \openai\ dependencies to support the new Contextual NLP verifier and Zero-Shot fact checker modules. Marked \google-generativeai\ as deprecated.
