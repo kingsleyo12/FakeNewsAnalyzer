@@ -41,8 +41,14 @@ class URLhausChecker:
             
             return {"is_malicious": False, "risk_score": 0, "source": "URLhaus"}
             
+        except requests.exceptions.ConnectionError:
+            print("[-] URLhaus API Connection Error: Failed to resolve the host. Check your internet connection or DNS settings.")
+            return {"is_malicious": False, "risk_score": 0, "source": "URLhaus (connection error)"}
+        except requests.exceptions.Timeout:
+            print("[-] URLhaus API Timeout: The server took too long to respond.")
+            return {"is_malicious": False, "risk_score": 0, "source": "URLhaus (timeout)"}
         except Exception as e:
-            print(f"URLhaus check failed: {e}")
+            print(f"[-] URLhaus check failed: {e}")
             return {"is_malicious": False, "risk_score": 0, "source": "URLhaus (unavailable)"}
     
     def extract_and_check(self, text: str) -> Dict:

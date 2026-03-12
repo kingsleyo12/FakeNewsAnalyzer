@@ -78,12 +78,22 @@ class FactChecker:
             logger.info("[*] Querying Llama-3 Fact Checker Agent...")
             return self._query_llm_fact_checker(text)
         except Exception as e:
+            error_str = str(e).lower()
+            if "getaddrinfo failed" in error_str or "nameresolutionerror" in error_str:
+                logger.error("Fact Checker Connection Error: Failed to resolve host. Check your internet connection or DNS.")
+                return {
+                    'verdict': 'UNVERIFIED',
+                    'confidence': 30,
+                    'fact_checks_found': 0,
+                    'explanation': 'Connection error: Unable to resolve fact-checking server.'
+                }
+            
             logger.error(f"LLM Fact Check API error: {e}")
             return {
                 'verdict': 'UNVERIFIED',
                 'confidence': 40,
                 'fact_checks_found': 0,
-                'explanation': f'LLM API Exception: {str(e)}'
+                'explanation': f'LLM API Exception: {str(e)[:100]}'
             }
 
     def _check_known_false(self, text_lower: str) -> Optional[str]:

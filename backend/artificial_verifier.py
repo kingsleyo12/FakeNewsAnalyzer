@@ -101,7 +101,13 @@ Text to analyze:
 
         except Exception as e:
             error_str = str(e)
-            print(f"NLP Engine error ({type(e).__name__}): {error_str[:150]}")
+            
+            # Specific handling for connection/DNS issues
+            if "getaddrinfo failed" in error_str or "NameResolutionError" in error_str:
+                print("[-] NLP Engine Connection Error: Failed to resolve host. Check your internet connection or DNS.")
+                return self._unavailable_response()
+
+            print(f"[-] NLP Engine error ({type(e).__name__}): {error_str[:150]}")
 
             rate_limit_signals = ['429', 'rate_limit', 'overloaded', 'Too Many Requests', 'insufficient', 'quota', 'credit']
 

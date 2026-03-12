@@ -16,7 +16,7 @@ load_dotenv()
 
 def run_all_tests():
     print("="*80)
-    print("🛡️  FAKE NEWS ANALYZER - MASTER TEST SUITE")
+    print("[SYSTEM] FAKE NEWS ANALYZER - MASTER TEST SUITE")
     print("="*80)
 
     # 1. INITIALization
@@ -25,9 +25,9 @@ def run_all_tests():
         fn = FakeNewsAnalyzer()
         orig = OriginalityAnalyzer()
         ct = CyberThreatAnalyzer()
-        print("✅ Engines Ready.")
+        print("[OK] Engines Ready.")
     except Exception as e:
-        print(f"❌ Initialization Error: {e}")
+        print(f"[FAIL] Initialization Error: {e}")
         return
 
     # 2. TEST CASES (Aggregated from all test files)

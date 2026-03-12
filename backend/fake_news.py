@@ -275,28 +275,47 @@ class HybridFakeNewsAnalyzer:
         Get score from zero-shot DeBERTa-v3-large model.
         The model is asked to classify text against explicit candidate labels,
         so there is no domain-specific training bias.
+        To defend against Dilution Evasion, we chunk the text and take the maximum fake score.
         Returns probability (0-100) that text is fake news / misinformation.
         """
         if not self.ml_available:
             return 50.0  # Neutral score if model unavailable
 
         try:
-            # zero-shot-classification returns a dict (not a list) for a single string
-            result = self.ml_model(
-                text,
-                candidate_labels=self.ZS_LABELS,
-                truncation=True,
-                max_length=499
-            )
+            # Chunking to defend against Dilution Evasion
+            # Split text by sentences, grouping into ~300 character chunks
+            sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+            chunks = []
+            current_chunk = ""
+            for s in sentences:
+                if len(current_chunk) + len(s) < 300:
+                    current_chunk += s + " "
+                else:
+                    if current_chunk: chunks.append(current_chunk.strip())
+                    current_chunk = s + " "
+            if current_chunk: chunks.append(current_chunk.strip())
+            
+            if not chunks:
+                chunks = [text]
+                
+            max_fake_score = 0
+            for chunk in chunks:
+                if not chunk: continue
+                
+                result = self.ml_model(
+                    chunk,
+                    candidate_labels=self.ZS_LABELS,
+                    truncation=True,
+                    max_length=499
+                )
 
-            # result["labels"] is sorted by score descending
-            labels = result["labels"]
-            scores = result["scores"]
+                fake_idx = result["labels"].index(self.ZS_FAKE_LABEL)
+                fake_probability = result["scores"][fake_idx] * 100
+                
+                if fake_probability > max_fake_score:
+                    max_fake_score = fake_probability
 
-            fake_idx = labels.index(self.ZS_FAKE_LABEL)
-            fake_probability = scores[fake_idx] * 100
-
-            return fake_probability
+            return max_fake_score
 
         except Exception as e:
             print(f"ML model error: {e}")

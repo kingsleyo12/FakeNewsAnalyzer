@@ -10,20 +10,30 @@ Academic Justification:
 - Async endpoints enable concurrent request handling
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator, HttpUrl
 from typing import Optional
 import logging
 import hashlib
 import json
+import re
+import time
 
 from fake_news import FakeNewsAnalyzer
 from originality import OriginalityAnalyzer
 from cyber_threat import CyberThreatAnalyzer
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging - Console and File
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("backend_service.log"),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -53,8 +63,18 @@ analysis_cache = {}
 class AnalysisRequest(BaseModel):
     """Request model for text analysis"""
     text: str = Field(..., min_length=10, max_length=50000, description="Text content to analyze")
-    url: Optional[str] = Field(None, description="Optional URL to analyze for threats")
+    url: Optional[HttpUrl] = Field(None, description="Optional URL to analyze for threats")
 
+    @validator("text")
+    def sanitize_text(cls, v):
+        # Remove basic HTML tags to prevent XSS/injection in downstream processing
+        sanitized = re.sub(r'<[^>]*>', ' ', v)
+        # Block common script injection vectors
+        if re.search(r'(javascript:|vbscript:|onload=|onerror=|\<script)', sanitized, re.IGNORECASE):
+            raise ValueError("Potentially unsafe payload detected in text.")
+        if len(sanitized.strip()) < 10:
+            raise ValueError("Text must contain at least 10 valid characters after cleaning.")
+        return sanitized.strip()
 
 class AnalysisResponse(BaseModel):
     """Response model with percentage-based scores"""
@@ -72,6 +92,20 @@ async def root():
     """Health check endpoint"""
     return {"status": "healthy", "service": "Fake News & Cyber Threat Intelligence API"}
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    System gracefully handles uncaught errors and logs them.
+    """
+    error_msg = str(exc)
+    logger.error(f"Unhandled system error on {request.url}: {error_msg}")
+    
+    friendly_msg = format_error_message(error_msg)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": friendly_msg, "error_type": "System Error"}
+    )
+
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_content(request: AnalysisRequest):
@@ -82,12 +116,14 @@ async def analyze_content(request: AnalysisRequest):
     as per academic requirements.
     """
     try:
+        start_time = time.time()
+        
         # Validate input
         if not request.text or len(request.text.strip()) < 10:
             raise HTTPException(status_code=400, detail="Text must be at least 10 characters")
         
-        text_raw = request.text.strip()
-        url_raw = request.url.strip() if request.url else ""
+        text_raw = request.text
+        url_raw = str(request.url).strip() if request.url else ""
         
         # Create a unique cache key based on text and URL
         cache_content = f"{text_raw}|{url_raw}"
@@ -108,7 +144,7 @@ async def analyze_content(request: AnalysisRequest):
             text = text[:15000]
             logger.info(f"Text truncated from {len(request.text)} to 15000 characters")
         
-        url = request.url.strip() if request.url else None
+        url = str(request.url).strip() if request.url else None
         
         # Run all analyzers
         fake_news_result = fake_news_analyzer.analyze(text)
@@ -126,6 +162,13 @@ async def analyze_content(request: AnalysisRequest):
 
         # Determine threat level based on cyber threat risk
         threat_level = get_threat_level(cyber_threat_result["risk_score"])
+        
+        end_time = time.time()
+        latency = round(end_time - start_time, 2)
+        
+        # Inject latency into the detailed factors so it appears in the Detailed Analysis UI
+        fake_news_result["factors"]["total_processing_latency"] = f"{latency}s"
+        cyber_threat_result["factors"]["total_processing_latency"] = f"{latency}s"
         
         result = AnalysisResponse(
             fake_news_probability=round(fake_news_result["probability"], 1),

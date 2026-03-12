@@ -33,7 +33,15 @@ class CyberThreatAnalyzer:
             'suspended', 'unauthorized access', 'security alert', 'unusual activity',
             'click here immediately', 'act now', 'limited time', 'expires soon',
             'your account will be', 'failure to', 'within 24 hours', 'within 48 hours',
-            'verify immediately', 'confirm now', 'urgent action required'
+            'verify immediately', 'confirm now', 'urgent action required',
+            'invoice attached', 'payment due', 'overdue notice', 'billing department',
+            'process payment', 'statement attached', 'review your invoice',
+            'account compromise', 'security breach', 'password reset required',
+            'verify login', 'multiple failed attempts', 're-authenticate',
+            'payroll update', 'ebilling notification', 'official notice',
+            'customer support alert', 'irregular activity', 'risk detected',
+            'blocked account', 'security violation', 'privacy update',
+            'new sign-in', 'unrecognized device', 'action needed', 'mandatory update'
         }
 
         self.social_engineering_patterns = [
@@ -45,47 +53,80 @@ class CyberThreatAnalyzer:
             r'(?:nigerian|foreign) (?:prince|diplomat|official)',
             r'wire (?:transfer|money)',
             r'(?:western union|moneygram)',
+            r'unauthorized (?:charge|transaction|purchase)',
+            r'suspicious (?:login|activity|access)',
+            r'account (?:locked|blocked|disabled)',
+            r'validate (?:your|the) (?:identity|account)',
+            r'(?:important|critical|official) (?:notification|update)',
+            r're-verify (?:now|immediately)',
+            r'security (?:code|token|key|pin)',
+            r'one-time (?:password|otp)',
+            r'payroll (?:change|adjustment|correction)',
+            r'human resources (?:notice|compliance)',
+            r'internal (?:communication|memo|alert)',
+            r'shared (?:a document|a file|via onedrive|via dropbox)',
+            r'view (?:your|the) (?:invoice|statement|document|file)'
         ]
 
         self.urgency_indicators = {
             'urgent', 'immediately', 'right now', 'asap', 'emergency',
             'act fast', 'dont delay', 'time sensitive', 'expires',
-            'last chance', 'final notice', 'action required', 'respond now'
+            'last chance', 'final notice', 'action required', 'respond now',
+            'before closing', 'automatic payment', 'debited tonight', 'avoid suspension',
+            'terminated', 'permanently deleted', 'loss of access', 'last warning',
+            'deadline', 'cutoff time', 'within 1 hour', 'within 30 minutes',
+            'instant', 'quick action', 'don\'t miss out', 'limited availability',
+            'enforce', 'compulsory', 'non-compliance', 'penalty', 'legal action',
+            'immediate attention', 'take action now', 'don\'t wait', 'critical'
         }
 
         self.credential_indicators = {
             'password', 'username', 'login', 'signin', 'sign in',
             'credit card', 'ssn', 'social security', 'bank account',
-            'routing number', 'pin', 'cvv', 'security code', 'mother maiden'
+            'routing number', 'pin', 'cvv', 'security code', 'mother maiden',
+            'secure login', 'member area', 'client portal', 'verify credentials',
+            'log in here', 'access your account', 'identity proof', 'drivers license',
+            'passport copy', 'billing address', 'cardholder name', 'expiry date',
+            'account number', 'sort code', 'iban', 'swift code', 'authentication'
         }
 
         self.suspicious_tlds = {
             '.xyz', '.top', '.club', '.work', '.click', '.link',
             '.info', '.online', '.site', '.website', '.space',
-            '.tk', '.ml', '.ga', '.cf', '.gq'
+            '.tk', '.ml', '.ga', '.cf', '.gq', '.cam', '.bet',
+            '.icu', '.buzz', '.monster', '.rest', '.quest'
         }
 
         self.trusted_domains = {
             'google.com', 'microsoft.com', 'apple.com', 'amazon.com',
             'facebook.com', 'twitter.com', 'linkedin.com', 'github.com',
-            'stackoverflow.com', 'wikipedia.org', 'gov', 'edu'
+            'stackoverflow.com', 'wikipedia.org', 'gov', 'edu',
+            'reuters.com', 'bbc.co.uk', 'nytimes.com', 'paypal.com'
         }
 
         self.malware_patterns = {
             'crypto scams': ['send bitcoin', 'send eth', 'wallet address', 'double your crypto',
-                             'guaranteed returns', 'investment opportunity', 'crypto giveaway'],
+                             'guaranteed returns', 'investment opportunity', 'crypto giveaway',
+                             'passive income', 'mining pool', 'meta mask', 'trust wallet',
+                             'private key', 'seed phrase', 'recovery phrase', 'crypto profit'],
             'tech support scams': ['call this number', 'microsoft support', 'virus detected',
-                                   'computer infected', 'refund department', 'tech support'],
+                                   'computer infected', 'refund department', 'tech support',
+                                   'firewall breached', 'system frozen', 'call helpdesk',
+                                   'technician', 'remote access', 'anydesk', 'teamviewer'],
             'romance scams': ['send money', 'western union', 'gift cards', 'stranded',
-                              'medical emergency', 'help me financially'],
+                              'medical emergency', 'help me financially', 'inheritance tax',
+                              'flight ticket', 'visa fee', 'love you', 'soulmate'],
             'advance fee fraud': ['transfer fee', 'release funds', 'processing fee',
-                                  'claim your prize', 'lottery winnings']
+                                   'claim your prize', 'lottery winnings', 'grant money',
+                                   'government funding', 'atm card', 'diplomatic courier']
         }
 
         self.dark_web_terms = {
             'ransomware', 'botnet', 'keylogger', 'rootkit', 'trojan',
             'zero-day', 'exploit kit', 'ddos', 'doxxing', 'swatting',
-            'carding', 'fullz', 'drops', 'mule account'
+            'carding', 'fullz', 'drops', 'mule account', 'darknet',
+            'onion link', 'tor browser', 'sql injection', 'xss',
+            'brute force', 'data leak', 'breach pack', 'credential stuffing'
         }
 
         # URLhaus API integration
@@ -137,8 +178,9 @@ class CyberThreatAnalyzer:
                 urlhaus_details = urlhaus_result['details']
                 if urlhaus_score > 0:
                     url_score = max(url_score, urlhaus_score)
-            except Exception as e:
-                print(f"URLhaus error: {e}")
+            except Exception:
+                # Silently fail here as urlhaus_checker now prints its own helpful error
+                pass
 
         # Use highest score + bonus for multiple active threats
         component_scores = [
@@ -182,7 +224,7 @@ class CyberThreatAnalyzer:
                 "url_risk_score": round(url_score, 1),
                 "malware_patterns": round(malware_score, 1),
                 "urlhaus_check": urlhaus_details,
-                "ai_threat_analysis": nlp_threat_details,
+                "explainable_ai": nlp_threat_details,
                 "detected_threats": self._get_detected_threats(
                     phishing_score, social_eng_score, urgency_score,
                     credential_score, url_score, malware_score

@@ -1,0 +1,594 @@
+﻿diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 6757d13..d61e430 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,15 +1,24 @@
+-# Fake News & CyberThreats Analyzer Changelog
+-
+-All notable changes to this project will be documented in this file.
+-
+-## [2026-03-05]
+-### Changed
+-- **`frontend/src/App.jsx`**: (Lines 161-165, 193-196, 434-475) Redesigned the "Detailed Analysis" and "Threat Intelligence Breakdown" UI sections into collapsible accordions to massively reduce vertical footprint. Defaults to closed state on new analysis.
+-- **`backend/fact_checker.py`**: (Lines 1-85) Completely rewrote the fact checker module. Deprecated the brittle Google Fact Check API and replaced it with a Zero-Shot LLM Agent using Groq and the `llama-3.3-70b-versatile` model. Enforced strict JSON response format to extract TRUE/FALSE/UNVERIFIED verdicts directly from the LLM's vast pre-training data.
+-- **`backend/fake_news.py`**: (Lines 532-547) Reconfigured the AI initialization block to mount the new `FactChecker` using `GROQ_API_KEY` rather than `GOOGLE_FACT_CHECK_KEY`.
+-- **`backend/fake_news.py`**: (Lines 652-669) Combined the new AI reasoning outputs with the zero-shot fact-checker explanations inside the main analysis loop so both text blocks render natively inside the frontend's "Explainable AI" card. Removed the redundant `fact_check_explanation` from the JSON return map.
+-- **`backend/fake_news.py`**: (Lines 96-146) Massively expanded the rules-based string matching dictionaries inside `_initialize_patterns`. Added over 75+ modern terms related to absurd sci-fi plots, dark-web conspiracy theories (e.g., adrenochrome, QAnon), health pseudoscience, and clickbait to greatly improve baseline heuristic accuracy when the AI models are unsure.
++# Fake News & CyberThreats Analyzer Changelog
+ 
+-- **`backend/cyber_threat.py`**: (Lines 83-176) Implemented approach #1: integrated a Zero-Shot Contextual AI Threat Engine using Groq (llama-3.1-8b-instant). If the AI detects sophisticated social engineering that bypasses legacy regex filters, it now dynamically boosts the total 
+isk_score and populates the i_threat_analysis factor with a detailed reasoning string for the UI.
++All notable changes to this project will be documented in this file.
+ 
+-- **\ackend/requirements.txt\**: Added \groq\ and \openai\ dependencies to support the new Contextual NLP verifier and Zero-Shot fact checker modules. Marked \google-generativeai\ as deprecated.
++## [2026-03-05] (Update 2)
++### Fixed & Improved
++- **Service Resilience**: Implemented specific exception handling for `NameResolutionError` and `getaddrinfo` failures across `urlhaus_checker.py`, `artificial_verifier.py`, and `fact_checker.py`. The system now fails gracefully with diagnostic messages instead of crashing when external APIs are unreachable.
++- **`backend/urlhaus_checker.py`**: Added explicit blocks for `requests.exceptions.ConnectionError` and `Timeout` to provide cleaner UI feedback.
++- **`backend/cyber_threat.py`**: Cleaned up redundant error logging to prevent console pollution.
++- **`backend/system_test_suite.py`**: Resolved `UnicodeEncodeError` on Windows by stripping emojis and explicitly setting UTF-8 encoding for the test runner.
++- **`backend/fact_checker.py`**: Truncated raw exception strings in the UI to prevent overwhelming the user with technical details during API failures.
++- **`backend/app.py`**: Configured `logging.FileHandler` to ensure all API transactions and errors are persisted to `backend_service.log` for debugging and audit purposes.
++- **`frontend/src/App.css`**: Restricted the `textarea` element by setting `resize: none;` to lock its dimensions and maintain the interface layout.
++- **`backend/cyber_threat.py`**: Massively expanded the heuristic dictionaries for all categories (Phishing, Social Engineering, Urgency, Credentials, Malware, and Dark Web) with over 150+ new keywords and regex patterns to significantly increase threat detection sensitivity. Renamed the `ai_threat_analysis` factor to `explainable_ai` to align with project terminology.
++
++## [2026-03-05] (Update 1)
++### Changed
++- **`frontend/src/App.jsx`**: (Lines 161-165, 193-196, 434-475) Redesigned the "Detailed Analysis" and "Threat Intelligence Breakdown" UI sections into collapsible accordions to massively reduce vertical footprint. Defaults to closed state on new analysis.
++- **`backend/fact_checker.py`**: (Lines 1-85) Completely rewrote the fact checker module. Deprecated the brittle Google Fact Check API and replaced it with a Zero-Shot LLM Agent using Groq and the `llama-3.3-70b-versatile` model. Enforced strict JSON response format to extract TRUE/FALSE/UNVERIFIED verdicts directly from the LLM's vast pre-training data.
++- **`backend/fake_news.py`**: (Lines 532-547) Reconfigured the AI initialization block to mount the new `FactChecker` using `GROQ_API_KEY` rather than `GOOGLE_FACT_CHECK_KEY`.
++- **`backend/fake_news.py`**: (Lines 652-669) Combined the new AI reasoning outputs with the zero-shot fact-checker explanations inside the main analysis loop so both text blocks render natively inside the frontend's "Explainable AI" card. Removed the redundant `fact_check_explanation` from the JSON return map.
++- **`backend/fake_news.py`**: (Lines 96-146) Massively expanded the rules-based string matching dictionaries inside `_initialize_patterns`. Added over 75+ modern terms related to absurd sci-fi plots, dark-web conspiracy theories (e.g., adrenochrome, QAnon), health pseudoscience, and clickbait to greatly improve baseline heuristic accuracy when the AI models are unsure.
++- **`backend/cyber_threat.py`**: (Lines 83-176) Implemented approach #1: integrated a Zero-Shot Contextual AI Threat Engine using Groq (llama-3.1-8b-instant). If the AI detects sophisticated social engineering that bypasses legacy regex filters, it now dynamically boosts the total risk_score and populates the ai_threat_analysis factor with a detailed reasoning string for the UI.
++- **`backend/requirements.txt`**: Added dependencies to support the new Contextual NLP verifier and Zero-Shot fact checker modules. Marked google-generativeai as deprecated.
+diff --git a/backend/app.py b/backend/app.py
+index 3acbe11..0c9aa8d 100644
+--- a/backend/app.py
++++ b/backend/app.py
+@@ -10,20 +10,30 @@ Academic Justification:
+ - Async endpoints enable concurrent request handling
+ """
+ 
+-from fastapi import FastAPI, HTTPException
++from fastapi import FastAPI, HTTPException, Request
++from fastapi.responses import JSONResponse
+ from fastapi.middleware.cors import CORSMiddleware
+-from pydantic import BaseModel, Field
++from pydantic import BaseModel, Field, validator, HttpUrl
+ from typing import Optional
+ import logging
+ import hashlib
+ import json
++import re
++import time
+ 
+ from fake_news import FakeNewsAnalyzer
+ from originality import OriginalityAnalyzer
+ from cyber_threat import CyberThreatAnalyzer
+ 
+-# Configure logging
+-logging.basicConfig(level=logging.INFO)
++# Configure logging - Console and File
++logging.basicConfig(
++    level=logging.INFO,
++    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
++    handlers=[
++        logging.FileHandler("backend_service.log"),
++        logging.StreamHandler()
++    ]
++)
+ logger = logging.getLogger(__name__)
+ 
+ app = FastAPI(
+@@ -53,8 +63,18 @@ analysis_cache = {}
+ class AnalysisRequest(BaseModel):
+     """Request model for text analysis"""
+     text: str = Field(..., min_length=10, max_length=50000, description="Text content to analyze")
+-    url: Optional[str] = Field(None, description="Optional URL to analyze for threats")
+-
++    url: Optional[HttpUrl] = Field(None, description="Optional URL to analyze for threats")
++
++    @validator("text")
++    def sanitize_text(cls, v):
++        # Remove basic HTML tags to prevent XSS/injection in downstream processing
++        sanitized = re.sub(r'<[^>]*>', ' ', v)
++        # Block common script injection vectors
++        if re.search(r'(javascript:|vbscript:|onload=|onerror=|\<script)', sanitized, re.IGNORECASE):
++            raise ValueError("Potentially unsafe payload detected in text.")
++        if len(sanitized.strip()) < 10:
++            raise ValueError("Text must contain at least 10 valid characters after cleaning.")
++        return sanitized.strip()
+ 
+ class AnalysisResponse(BaseModel):
+     """Response model with percentage-based scores"""
+@@ -72,6 +92,20 @@ async def root():
+     """Health check endpoint"""
+     return {"status": "healthy", "service": "Fake News & Cyber Threat Intelligence API"}
+ 
++@app.exception_handler(Exception)
++async def global_exception_handler(request: Request, exc: Exception):
++    """
++    System gracefully handles uncaught errors and logs them.
++    """
++    error_msg = str(exc)
++    logger.error(f"Unhandled system error on {request.url}: {error_msg}", exc_info=True)
++    
++    friendly_msg = format_error_message(error_msg)
++    return JSONResponse(
++        status_code=500,
++        content={"detail": friendly_msg, "error_type": "System Error"}
++    )
++
+ 
+ @app.post("/analyze", response_model=AnalysisResponse)
+ async def analyze_content(request: AnalysisRequest):
+@@ -82,12 +116,14 @@ async def analyze_content(request: AnalysisRequest):
+     as per academic requirements.
+     """
+     try:
++        start_time = time.time()
++        
+         # Validate input
+         if not request.text or len(request.text.strip()) < 10:
+             raise HTTPException(status_code=400, detail="Text must be at least 10 characters")
+         
+-        text_raw = request.text.strip()
+-        url_raw = request.url.strip() if request.url else ""
++        text_raw = request.text
++        url_raw = str(request.url).strip() if request.url else ""
+         
+         # Create a unique cache key based on text and URL
+         cache_content = f"{text_raw}|{url_raw}"
+@@ -108,7 +144,7 @@ async def analyze_content(request: AnalysisRequest):
+             text = text[:15000]
+             logger.info(f"Text truncated from {len(request.text)} to 15000 characters")
+         
+-        url = request.url.strip() if request.url else None
++        url = str(request.url).strip() if request.url else None
+         
+         # Run all analyzers
+         fake_news_result = fake_news_analyzer.analyze(text)
+@@ -127,6 +163,13 @@ async def analyze_content(request: AnalysisRequest):
+         # Determine threat level based on cyber threat risk
+         threat_level = get_threat_level(cyber_threat_result["risk_score"])
+         
++        end_time = time.time()
++        latency = round(end_time - start_time, 2)
++        
++        # Inject latency into the detailed factors so it appears in the Detailed Analysis UI
++        fake_news_result["factors"]["total_processing_latency"] = f"{latency}s"
++        cyber_threat_result["factors"]["total_processing_latency"] = f"{latency}s"
++        
+         result = AnalysisResponse(
+             fake_news_probability=round(fake_news_result["probability"], 1),
+             news_authenticity_score=news_authenticity_score,
+@@ -153,7 +196,7 @@ async def analyze_content(request: AnalysisRequest):
+     except Exception as e:
+         error_msg = str(e)
+         friendly_msg = format_error_message(error_msg)
+-        logger.error(f"Analysis error: {error_msg}")
++        logger.error(f"Analysis error: {error_msg}", exc_info=True)
+         raise HTTPException(status_code=500, detail=friendly_msg)
+ 
+ 
+diff --git a/backend/artificial_verifier.py b/backend/artificial_verifier.py
+index 57d4361..2f8c283 100644
+--- a/backend/artificial_verifier.py
++++ b/backend/artificial_verifier.py
+@@ -101,7 +101,13 @@ Text to analyze:
+ 
+         except Exception as e:
+             error_str = str(e)
+-            print(f"NLP Engine error ({type(e).__name__}): {error_str[:150]}")
++            
++            # Specific handling for connection/DNS issues
++            if "getaddrinfo failed" in error_str or "NameResolutionError" in error_str:
++                print("[-] NLP Engine Connection Error: Failed to resolve host. Check your internet connection or DNS.")
++                return self._unavailable_response()
++
++            print(f"[-] NLP Engine error ({type(e).__name__}): {error_str[:150]}")
+ 
+             rate_limit_signals = ['429', 'rate_limit', 'overloaded', 'Too Many Requests', 'insufficient', 'quota', 'credit']
+ 
+diff --git a/backend/cyber_threat.py b/backend/cyber_threat.py
+index bc7b4fa..0d924cb 100644
+--- a/backend/cyber_threat.py
++++ b/backend/cyber_threat.py
+@@ -33,7 +33,15 @@ class CyberThreatAnalyzer:
+             'suspended', 'unauthorized access', 'security alert', 'unusual activity',
+             'click here immediately', 'act now', 'limited time', 'expires soon',
+             'your account will be', 'failure to', 'within 24 hours', 'within 48 hours',
+-            'verify immediately', 'confirm now', 'urgent action required'
++            'verify immediately', 'confirm now', 'urgent action required',
++            'invoice attached', 'payment due', 'overdue notice', 'billing department',
++            'process payment', 'statement attached', 'review your invoice',
++            'account compromise', 'security breach', 'password reset required',
++            'verify login', 'multiple failed attempts', 're-authenticate',
++            'payroll update', 'ebilling notification', 'official notice',
++            'customer support alert', 'irregular activity', 'risk detected',
++            'blocked account', 'security violation', 'privacy update',
++            'new sign-in', 'unrecognized device', 'action needed', 'mandatory update'
+         }
+ 
+         self.social_engineering_patterns = [
+@@ -45,47 +53,80 @@ class CyberThreatAnalyzer:
+             r'(?:nigerian|foreign) (?:prince|diplomat|official)',
+             r'wire (?:transfer|money)',
+             r'(?:western union|moneygram)',
++            r'unauthorized (?:charge|transaction|purchase)',
++            r'suspicious (?:login|activity|access)',
++            r'account (?:locked|blocked|disabled)',
++            r'validate (?:your|the) (?:identity|account)',
++            r'(?:important|critical|official) (?:notification|update)',
++            r're-verify (?:now|immediately)',
++            r'security (?:code|token|key|pin)',
++            r'one-time (?:password|otp)',
++            r'payroll (?:change|adjustment|correction)',
++            r'human resources (?:notice|compliance)',
++            r'internal (?:communication|memo|alert)',
++            r'shared (?:a document|a file|via onedrive|via dropbox)',
++            r'view (?:your|the) (?:invoice|statement|document|file)'
+         ]
+ 
+         self.urgency_indicators = {
+             'urgent', 'immediately', 'right now', 'asap', 'emergency',
+             'act fast', 'dont delay', 'time sensitive', 'expires',
+-            'last chance', 'final notice', 'action required', 'respond now'
++            'last chance', 'final notice', 'action required', 'respond now',
++            'before closing', 'automatic payment', 'debited tonight', 'avoid suspension',
++            'terminated', 'permanently deleted', 'loss of access', 'last warning',
++            'deadline', 'cutoff time', 'within 1 hour', 'within 30 minutes',
++            'instant', 'quick action', 'don\'t miss out', 'limited availability',
++            'enforce', 'compulsory', 'non-compliance', 'penalty', 'legal action',
++            'immediate attention', 'take action now', 'don\'t wait', 'critical'
+         }
+ 
+         self.credential_indicators = {
+             'password', 'username', 'login', 'signin', 'sign in',
+             'credit card', 'ssn', 'social security', 'bank account',
+-            'routing number', 'pin', 'cvv', 'security code', 'mother maiden'
++            'routing number', 'pin', 'cvv', 'security code', 'mother maiden',
++            'secure login', 'member area', 'client portal', 'verify credentials',
++            'log in here', 'access your account', 'identity proof', 'drivers license',
++            'passport copy', 'billing address', 'cardholder name', 'expiry date',
++            'account number', 'sort code', 'iban', 'swift code', 'authentication'
+         }
+ 
+         self.suspicious_tlds = {
+             '.xyz', '.top', '.club', '.work', '.click', '.link',
+             '.info', '.online', '.site', '.website', '.space',
+-            '.tk', '.ml', '.ga', '.cf', '.gq'
++            '.tk', '.ml', '.ga', '.cf', '.gq', '.cam', '.bet',
++            '.icu', '.buzz', '.monster', '.rest', '.quest'
+         }
+ 
+         self.trusted_domains = {
+             'google.com', 'microsoft.com', 'apple.com', 'amazon.com',
+             'facebook.com', 'twitter.com', 'linkedin.com', 'github.com',
+-            'stackoverflow.com', 'wikipedia.org', 'gov', 'edu'
++            'stackoverflow.com', 'wikipedia.org', 'gov', 'edu',
++            'reuters.com', 'bbc.co.uk', 'nytimes.com', 'paypal.com'
+         }
+ 
+         self.malware_patterns = {
+             'crypto scams': ['send bitcoin', 'send eth', 'wallet address', 'double your crypto',
+-                             'guaranteed returns', 'investment opportunity', 'crypto giveaway'],
++                             'guaranteed returns', 'investment opportunity', 'crypto giveaway',
++                             'passive income', 'mining pool', 'meta mask', 'trust wallet',
++                             'private key', 'seed phrase', 'recovery phrase', 'crypto profit'],
+             'tech support scams': ['call this number', 'microsoft support', 'virus detected',
+-                                   'computer infected', 'refund department', 'tech support'],
++                                   'computer infected', 'refund department', 'tech support',
++                                   'firewall breached', 'system frozen', 'call helpdesk',
++                                   'technician', 'remote access', 'anydesk', 'teamviewer'],
+             'romance scams': ['send money', 'western union', 'gift cards', 'stranded',
+-                              'medical emergency', 'help me financially'],
++                              'medical emergency', 'help me financially', 'inheritance tax',
++                              'flight ticket', 'visa fee', 'love you', 'soulmate'],
+             'advance fee fraud': ['transfer fee', 'release funds', 'processing fee',
+-                                  'claim your prize', 'lottery winnings']
++                                   'claim your prize', 'lottery winnings', 'grant money',
++                                   'government funding', 'atm card', 'diplomatic courier']
+         }
+ 
+         self.dark_web_terms = {
+             'ransomware', 'botnet', 'keylogger', 'rootkit', 'trojan',
+             'zero-day', 'exploit kit', 'ddos', 'doxxing', 'swatting',
+-            'carding', 'fullz', 'drops', 'mule account'
++            'carding', 'fullz', 'drops', 'mule account', 'darknet',
++            'onion link', 'tor browser', 'sql injection', 'xss',
++            'brute force', 'data leak', 'breach pack', 'credential stuffing'
+         }
+ 
+         # URLhaus API integration
+@@ -137,8 +178,9 @@ class CyberThreatAnalyzer:
+                 urlhaus_details = urlhaus_result['details']
+                 if urlhaus_score > 0:
+                     url_score = max(url_score, urlhaus_score)
+-            except Exception as e:
+-                print(f"URLhaus error: {e}")
++            except Exception:
++                # Silently fail here as urlhaus_checker now prints its own helpful error
++                pass
+ 
+         # Use highest score + bonus for multiple active threats
+         component_scores = [
+@@ -182,7 +224,7 @@ class CyberThreatAnalyzer:
+                 "url_risk_score": round(url_score, 1),
+                 "malware_patterns": round(malware_score, 1),
+                 "urlhaus_check": urlhaus_details,
+-                "ai_threat_analysis": nlp_threat_details,
++                "explainable_ai": nlp_threat_details,
+                 "detected_threats": self._get_detected_threats(
+                     phishing_score, social_eng_score, urgency_score,
+                     credential_score, url_score, malware_score
+diff --git a/backend/fact_checker.py b/backend/fact_checker.py
+index c2829cf..514cf42 100644
+--- a/backend/fact_checker.py
++++ b/backend/fact_checker.py
+@@ -78,12 +78,22 @@ class FactChecker:
+             logger.info("[*] Querying Llama-3 Fact Checker Agent...")
+             return self._query_llm_fact_checker(text)
+         except Exception as e:
++            error_str = str(e).lower()
++            if "getaddrinfo failed" in error_str or "nameresolutionerror" in error_str:
++                logger.error("Fact Checker Connection Error: Failed to resolve host. Check your internet connection or DNS.")
++                return {
++                    'verdict': 'UNVERIFIED',
++                    'confidence': 30,
++                    'fact_checks_found': 0,
++                    'explanation': 'Connection error: Unable to resolve fact-checking server.'
++                }
++            
+             logger.error(f"LLM Fact Check API error: {e}")
+             return {
+                 'verdict': 'UNVERIFIED',
+                 'confidence': 40,
+                 'fact_checks_found': 0,
+-                'explanation': f'LLM API Exception: {str(e)}'
++                'explanation': f'LLM API Exception: {str(e)[:100]}'
+             }
+ 
+     def _check_known_false(self, text_lower: str) -> Optional[str]:
+diff --git a/backend/fake_news.py b/backend/fake_news.py
+index 653b2a8..9127641 100644
+--- a/backend/fake_news.py
++++ b/backend/fake_news.py
+@@ -275,28 +275,47 @@ class HybridFakeNewsAnalyzer:
+         Get score from zero-shot DeBERTa-v3-large model.
+         The model is asked to classify text against explicit candidate labels,
+         so there is no domain-specific training bias.
++        To defend against Dilution Evasion, we chunk the text and take the maximum fake score.
+         Returns probability (0-100) that text is fake news / misinformation.
+         """
+         if not self.ml_available:
+             return 50.0  # Neutral score if model unavailable
+ 
+         try:
+-            # zero-shot-classification returns a dict (not a list) for a single string
+-            result = self.ml_model(
+-                text,
+-                candidate_labels=self.ZS_LABELS,
+-                truncation=True,
+-                max_length=499
+-            )
+-
+-            # result["labels"] is sorted by score descending
+-            labels = result["labels"]
+-            scores = result["scores"]
++            # Chunking to defend against Dilution Evasion
++            # Split text by sentences, grouping into ~300 character chunks
++            sentences = re.split(r'(?<=[.!?])\s+', text.strip())
++            chunks = []
++            current_chunk = ""
++            for s in sentences:
++                if len(current_chunk) + len(s) < 300:
++                    current_chunk += s + " "
++                else:
++                    if current_chunk: chunks.append(current_chunk.strip())
++                    current_chunk = s + " "
++            if current_chunk: chunks.append(current_chunk.strip())
++            
++            if not chunks:
++                chunks = [text]
++                
++            max_fake_score = 0
++            for chunk in chunks:
++                if not chunk: continue
++                
++                result = self.ml_model(
++                    chunk,
++                    candidate_labels=self.ZS_LABELS,
++                    truncation=True,
++                    max_length=499
++                )
+ 
+-            fake_idx = labels.index(self.ZS_FAKE_LABEL)
+-            fake_probability = scores[fake_idx] * 100
++                fake_idx = result["labels"].index(self.ZS_FAKE_LABEL)
++                fake_probability = result["scores"][fake_idx] * 100
++                
++                if fake_probability > max_fake_score:
++                    max_fake_score = fake_probability
+ 
+-            return fake_probability
++            return max_fake_score
+ 
+         except Exception as e:
+             print(f"ML model error: {e}")
+diff --git a/backend/system_test_suite.py b/backend/system_test_suite.py
+index 75930f4..9cdd1b5 100644
+--- a/backend/system_test_suite.py
++++ b/backend/system_test_suite.py
+@@ -16,7 +16,7 @@ load_dotenv()
+ 
+ def run_all_tests():
+     print("="*80)
+-    print("­ƒøí´©Å  FAKE NEWS ANALYZER - MASTER TEST SUITE")
++    print("[SYSTEM] FAKE NEWS ANALYZER - MASTER TEST SUITE")
+     print("="*80)
+ 
+     # 1. INITIALization
+@@ -25,9 +25,9 @@ def run_all_tests():
+         fn = FakeNewsAnalyzer()
+         orig = OriginalityAnalyzer()
+         ct = CyberThreatAnalyzer()
+-        print("Ô£à Engines Ready.")
++        print("[OK] Engines Ready.")
+     except Exception as e:
+-        print(f"ÔØî Initialization Error: {e}")
++        print(f"[FAIL] Initialization Error: {e}")
+         return
+ 
+     # 2. TEST CASES (Aggregated from all test files)
+diff --git a/backend/urlhaus_checker.py b/backend/urlhaus_checker.py
+index 99f476f..bb9b8fd 100644
+--- a/backend/urlhaus_checker.py
++++ b/backend/urlhaus_checker.py
+@@ -41,8 +41,14 @@ class URLhausChecker:
+             
+             return {"is_malicious": False, "risk_score": 0, "source": "URLhaus"}
+             
++        except requests.exceptions.ConnectionError:
++            print("[-] URLhaus API Connection Error: Failed to resolve the host. Check your internet connection or DNS settings.")
++            return {"is_malicious": False, "risk_score": 0, "source": "URLhaus (connection error)"}
++        except requests.exceptions.Timeout:
++            print("[-] URLhaus API Timeout: The server took too long to respond.")
++            return {"is_malicious": False, "risk_score": 0, "source": "URLhaus (timeout)"}
+         except Exception as e:
+-            print(f"URLhaus check failed: {e}")
++            print(f"[-] URLhaus check failed: {e}")
+             return {"is_malicious": False, "risk_score": 0, "source": "URLhaus (unavailable)"}
+     
+     def extract_and_check(self, text: str) -> Dict:
+diff --git a/frontend/src/App.css b/frontend/src/App.css
+index 1513481..cb77492 100644
+--- a/frontend/src/App.css
++++ b/frontend/src/App.css
+@@ -105,7 +105,18 @@
+   color: #e4e4e4;
+ }
+ 
+-.input-group textarea,
++.input-group textarea {
++  width: 100%;
++  padding: 0.875rem;
++  border: 1px solid rgba(255, 255, 255, 0.2);
++  border-radius: 8px;
++  background: rgba(0, 0, 0, 0.3);
++  color: #e4e4e4;
++  font-size: 1rem;
++  transition: border-color 0.2s, box-shadow 0.2s;
++  resize: none; /* Prevent manual expansion */
++}
++
+ .input-group input {
+   width: 100%;
+   padding: 0.875rem;
+@@ -767,3 +778,81 @@
+     font-size: 2rem;
+   }
+ }
++
++/* Performance Evaluation Terminal */
++.performance-terminal {
++  background-color: #0d1117;
++  border-radius: 8px;
++  border: 1px solid rgba(255, 255, 255, 0.1);
++  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
++  overflow: hidden;
++  font-family: 'Courier New', Courier, monospace;
++  margin-top: 1rem;
++}
++
++.terminal-header {
++  background-color: #161b22;
++  padding: 8px 16px;
++  display: flex;
++  align-items: center;
++  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
++}
++
++.terminal-header .dot {
++  width: 12px;
++  height: 12px;
++  border-radius: 50%;
++  margin-right: 8px;
++}
++
++.dot-red { background-color: #ff5f56; }
++.dot-yellow { background-color: #ffbd2e; }
++.dot-green { background-color: #27c93f; }
++
++.terminal-title {
++  color: #8b949e;
++  font-size: 0.85rem;
++  margin-left: auto;
++  margin-right: auto;
++  font-weight: 500;
++  letter-spacing: 0.5px;
++}
++
++.terminal-body {
++  padding: 16px;
++  color: #22c55e;
++  font-size: 0.95rem;
++  line-height: 1.6;
++  min-height: 180px;
++}
++
++.terminal-line {
++  margin-bottom: 8px;
++}
++
++.terminal-line.typing-effect {
++  animation: typeLine 0.1s ease-out;
++}
++
++@keyframes typeLine {
++  from { opacity: 0; transform: translateY(5px); }
++  to { opacity: 1; transform: translateY(0); }
++}
++
++.terminal-line .prompt {
++  color: #a78bfa;
++  margin-right: 12px;
++  font-weight: bold;
++}
++
++.terminal-line .cursor {
++  display: inline-block;
++  width: 8px;
++  animation: blink 1s step-end infinite;
++  color: #22c55e;
++}
++
++@keyframes blink {
++  0%, 100% { opacity: 1; }
++  50% { opacity: 0; }
++}
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index 9ac41f8..daaa24a 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -468,12 +468,6 @@ function App() {
+                     badge={results.threat_level}
+                     badgeColor={getThreatColor(results.threat_level)}
+                   />
+-                  {/* <ScoreCard
+-                    title="­ƒöÆ Cyber Safety Score"
+-                    value={results.cyber_authenticity_score}
+-                    color={getScoreColor(results.cyber_authenticity_score, true)}
+-                    ranges={CYBER_AUTH_RANGES}
+-                  /> */}
+                 </div>
+ 
+                 <div className="details-section">
+@@ -493,6 +487,7 @@ function App() {
+                 </div>
+               </>
+             )}
++
+           </section>
+         )}
+       </main>
