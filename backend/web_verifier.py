@@ -43,8 +43,8 @@ class WebSearchVerifier:
         elif self.brave_api_key:
             print(" Brave Search module enabled")
         else:
-            print("  No search API key found — falling back to DuckDuckGo (may be rate-limited).")
-            print("  Tip: Sign up free at https://serper.dev — 2,500 free queries, no credit card.")
+            print("  No search API key found - falling back to DuckDuckGo (may be rate-limited).")
+            print("  Tip: Sign up free at https://serper.dev - 2,500 free queries, no credit card.")
             print("       Then add SERPER_API_KEY=<key> to your .env file.")
 
         # Trusted news sources (high credibility)
@@ -305,7 +305,7 @@ class WebSearchVerifier:
                         print(f"DuckDuckGo rate-limited. Retrying in {wait:.1f}s (attempt {attempt + 1}/{retries})...")
                         time.sleep(wait)
                     else:
-                        print(f"DuckDuckGo rate-limit persists after {retries} attempts — skipping web search.")
+                        print(f"DuckDuckGo rate-limit persists after {retries} attempts - skipping web search.")
                         WebSearchVerifier._last_ddg_call = time.time()
                         return []
                 else:

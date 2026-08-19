@@ -73,7 +73,7 @@ class HybridFakeNewsAnalyzer:
                         local_files_only=True
                     )
                 except Exception:
-                    print("  Model not in local cache — downloading now...")
+                    print("  Model not in local cache - downloading now...")
                     self.ml_model = pipeline(
                         "zero-shot-classification",
                         model=MODEL_ID,
@@ -215,7 +215,7 @@ class HybridFakeNewsAnalyzer:
 
             if ml_confidence_zone == 'unsure':
                 # ML is guessing — keep it at just 10%, hand 90% to rules
-                print(f"  [Confidence Gate] ML unsure ({ml_score:.1f}%) → weight reduced to 10%")
+                print(f"  [Confidence Gate] ML unsure ({ml_score:.1f}%) -> weight reduced to 10%")
                 final_score = (
                     ml_score        * 0.10 +
                     heuristic_score * 0.55 +
@@ -223,7 +223,7 @@ class HybridFakeNewsAnalyzer:
                 )
             elif ml_confidence_zone == 'very_confident':
                 # ML is strongly sure — let it dominate at 70%
-                print(f"  [Confidence Gate] ML very confident ({ml_score:.1f}%) → weight raised to 70%")
+                print(f"  [Confidence Gate] ML very confident ({ml_score:.1f}%) -> weight raised to 70%")
                 final_score = (
                     ml_score        * 0.70 +
                     heuristic_score * 0.20 +
@@ -651,11 +651,11 @@ class FakeNewsAnalyzer:
                 if (base_is_ambiguous or large_disagreement) and ai_is_very_sure:
                     # Tiebreaker / Override: base is on the fence OR completely wrong, and Llama is strongly sure.
                     # Let the NLP score dominate (80%) with a small base anchor (20%).
-                    print(f"  [Confidence Gate] Base: {base_score:.1f}%, Contextual NLP very sure ({ai_prob}%) → NLP tiebreaker override")
+                    print(f"  [Confidence Gate] Base: {base_score:.1f}%, Contextual NLP very sure ({ai_prob}%) -> NLP tiebreaker override")
                     base_score = (ai_prob * 0.80) + (base_score * 0.20)
                 elif (base_is_ambiguous or large_disagreement) and ai_is_confident:
                     # Base is unsure or highly mismatched, NLP is meaningfully confident — shift 60% toward NLP.
-                    print(f"  [Confidence Gate] Base: {base_score:.1f}%, Contextual NLP confident ({ai_prob}%) → partial NLP override")
+                    print(f"  [Confidence Gate] Base: {base_score:.1f}%, Contextual NLP confident ({ai_prob}%) -> partial NLP override")
                     base_score = (ai_prob * 0.60) + (base_score * 0.40)
                 else:
                     # Standard case: NLP nudges the score by up to ±20 pts
@@ -663,7 +663,7 @@ class FakeNewsAnalyzer:
                     base_score += ai_impact
 
                 base_score = max(0, min(base_score, 100))
-                print(f"  NLP Engine: {ai_result['verdict']} ({ai_prob}% prob) | final base → {base_score:.1f}%")
+                print(f"  NLP Engine: {ai_result['verdict']} ({ai_prob}% prob) | final base -> {base_score:.1f}%")
                 ai_success = True
             except Exception as e:
                 print(f" NLP Engine error: {e}")

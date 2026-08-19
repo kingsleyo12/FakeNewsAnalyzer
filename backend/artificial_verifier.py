@@ -114,7 +114,7 @@ Text to analyze:
             if any(kw.lower() in error_str.lower() for kw in rate_limit_signals):
                 # Temporary rate limit or quota — 5 min cooldown for Groq
                 ArtificialVerifier._unavailable_until = time.time() + 300
-                print(f"  NLP Engine rate limited/quota — skipping layer for 5 minutes")
+                print(f"  NLP Engine rate limited/quota - skipping layer for 5 minutes")
                 
             return self._unavailable_response()
 

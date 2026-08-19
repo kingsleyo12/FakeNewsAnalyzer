@@ -1,0 +1,55 @@
+# Render.com Deployment Blueprint
+# https://render.com/docs/blueprint-spec
+#
+# Quick deploy:
+#   1. Push this repo to GitHub
+#   2. Go to https://dashboard.render.com/blueprints
+#   3. Connect your repo and Render will auto-detect this file
+#
+# Or deploy individually:
+#   Backend:  New > Web Service > Connect repo > Root directory: backend
+#   Frontend: New > Static Site  > Connect repo > Root directory: frontend
+
+services:
+  # ── Backend (FastAPI + ML) ──────────────────────────────────────────────
+  - type: web
+    name: sentinel-nlp-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false  # Set manually in Render dashboard for security
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: TRANSFORMERS_CACHE
+        value: /opt/render/project/src/backend/.cache/huggingface
+      - key: HF_HOME
+        value: /opt/render/project/src/backend/.cache/huggingface
+    disk:
+      name: model-cache
+      mountPath: /opt/render/project/src/backend/.cache
+      sizeGB: 3
+    # Free tier: 512MB RAM — not enough for torch+transformers
+    # Starter ($7/mo): 512MB — still tight
+    # Standard ($25/mo): 2GB — recommended minimum
+    plan: standard
+    autoDeploy: true
+
+  # ── Frontend (Static React) ────────────────────────────────────────────
+  - type: web
+    name: sentinel-nlp-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false  # Set to your backend URL, e.g. https://sentinel-nlp-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    autoDeploy: true
